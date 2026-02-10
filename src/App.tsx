@@ -270,6 +270,12 @@ const App: React.FC = () => {
     }
 
     // Ensure map container is visible and properly sized
+    // Double-check container exists and has style before accessing
+    if (!container || !container.style) {
+      console.warn('[App] Container or style not available when setting styles');
+      return;
+    }
+    
     container.style.display = 'block';
     container.style.width = '100%';
     container.style.height = '100%';
