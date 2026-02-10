@@ -186,13 +186,25 @@ const App: React.FC = () => {
             feature.properties = {};
           }
           // Set default allowed value (will be updated by updateCountryOverlay)
-          // Try ISO_NUMERIC first, then convert from ISO2 (id field)
+          // Try ISO_NUMERIC first, then convert from ISO2/ISO3
           let countryCode = feature.properties.ISO_NUMERIC;
           if (!countryCode) {
-            const iso2 = feature.properties.id || feature.properties.ISO2;
+            // Check feature-level id (ISO3) and properties
+            const iso3 = feature.id;
+            const iso2 = feature.properties?.ISO2;
+            
             if (iso2) {
               countryCode = iso2ToNumeric(iso2);
-              // Store it for future use
+            } else if (iso3) {
+              // Convert ISO3 to ISO2 first, then to numeric
+              const iso2FromIso3 = iso3ToIso2(iso3);
+              if (iso2FromIso3) {
+                countryCode = iso2ToNumeric(iso2FromIso3);
+              }
+            }
+            
+            // Store it for future use
+            if (countryCode) {
               feature.properties.ISO_NUMERIC = countryCode;
             }
           }
@@ -297,13 +309,25 @@ const App: React.FC = () => {
         feature.properties = {};
       }
       
-      // Try ISO_NUMERIC first, then convert from ISO2 (id field)
+      // Try ISO_NUMERIC first, then convert from ISO2/ISO3
       let countryCode = feature.properties.ISO_NUMERIC;
       if (!countryCode) {
-        const iso2 = feature.properties.id || feature.properties.ISO2;
+        // Check feature-level id (ISO3) and properties
+        const iso3 = feature.id;
+        const iso2 = feature.properties?.ISO2;
+        
         if (iso2) {
           countryCode = iso2ToNumeric(iso2);
-          // Store it for future use
+        } else if (iso3) {
+          // Convert ISO3 to ISO2 first, then to numeric
+          const iso2FromIso3 = iso3ToIso2(iso3);
+          if (iso2FromIso3) {
+            countryCode = iso2ToNumeric(iso2FromIso3);
+          }
+        }
+        
+        // Store it for future use
+        if (countryCode) {
           feature.properties.ISO_NUMERIC = countryCode;
         }
       }
@@ -818,22 +842,6 @@ const App: React.FC = () => {
     }
   };
 
-  const iso2ToNumeric = (iso2: string): number => {
-    // Simplified mapping - in production, use a complete mapping
-    // Returns u32 (ISO numeric code)
-    const mapping: Record<string, number> = {
-      US: 840,
-      GB: 826,
-      CA: 124,
-      AU: 36,
-      DE: 276,
-      FR: 250,
-      JP: 392,
-      CN: 156,
-      // Add more as needed
-    };
-    return mapping[iso2] || 0;
-  };
 
   const calculateCellId = (lat: number, lng: number): number => {
     // Simple grid-based cell calculation
@@ -895,7 +903,7 @@ const App: React.FC = () => {
           <div className="overlay-controls">
             {wallet && (
               <button className="icon-button" onClick={disconnectWallet} title="Disconnect Wallet">
-                ΓÜí
+                ✕
               </button>
             )}
             <button 
@@ -903,7 +911,7 @@ const App: React.FC = () => {
               onClick={() => setOverlayMinimized(!overlayMinimized)} 
               title={overlayMinimized ? "Restore" : "Minimize"}
             >
-              {overlayMinimized ? 'Γû▓' : 'Γû╝'}
+              {overlayMinimized ? '□' : '−'}
             </button>
           </div>
         </div>

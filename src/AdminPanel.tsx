@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { ContractClient } from './contract';
-import { iso2ToNumeric } from './countryCodes';
+import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 
 interface AdminPanelProps {
   contractClient: ContractClient;
@@ -32,18 +32,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           if (geojson.features) {
             const countries = geojson.features
               .map((feature: any) => {
-                // Try ISO_NUMERIC first, then convert from ISO2 (id field)
+                // Try ISO_NUMERIC first, then convert from ISO2/ISO3
                 let code = feature.properties?.ISO_NUMERIC;
                 const name = feature.properties?.name || feature.properties?.NAME;
-                const iso2 = feature.properties?.id || feature.properties?.ISO2;
+                // Check both properties.id and feature-level id (which is ISO3)
+                const iso3 = feature.id || feature.properties?.id;
+                const iso2 = feature.properties?.ISO2;
                 
-                // If no ISO_NUMERIC, convert from ISO2
-                if (!code && iso2) {
-                  code = iso2ToNumeric(iso2);
+                // If no ISO_NUMERIC, try to convert from ISO2 or ISO3
+                if (!code) {
+                  if (iso2) {
+                    code = iso2ToNumeric(iso2);
+                  } else if (iso3) {
+                    // Convert ISO3 to ISO2 first, then to numeric
+                    const iso2FromIso3 = iso3ToIso2(iso3);
+                    if (iso2FromIso3) {
+                      code = iso2ToNumeric(iso2FromIso3);
+                    }
+                  }
                 }
                 
                 if (code && name) {
-                  return { code: Number(code), name: String(name), iso2: String(iso2 || '') };
+                  return { code: Number(code), name: String(name), iso2: String(iso2 || iso3ToIso2(iso3) || '') };
                 }
                 return null;
               })
