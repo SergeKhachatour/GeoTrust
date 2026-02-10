@@ -253,6 +253,7 @@ const App: React.FC = () => {
 
   // Define initializeMap before the useEffect that uses it
   const initializeMap = useCallback((container: HTMLDivElement) => {
+    console.log('[App] initializeMap called with container:', container);
 
     // Check if Mapbox token is available
     const token = process.env.REACT_APP_MAPBOX_TOKEN;
@@ -260,6 +261,8 @@ const App: React.FC = () => {
       console.error('[App] Mapbox token not found! Check .env.local file');
       return;
     }
+    
+    console.log('[App] Mapbox token found, proceeding with map initialization');
 
     // Ensure map container is visible and properly sized
     // Double-check container exists and has style before accessing
