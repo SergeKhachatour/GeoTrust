@@ -184,7 +184,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       />
       <div className="country-list">
         {filteredCountries.map((country) => {
-          const isAllowed = allowedCountries.has(country.code);
+          const isAllowed = isCountryAllowed(country.code);
           return (
             <div key={country.code} className="country-item">
               <span>{country.name}</span>
