@@ -528,8 +528,6 @@ export class ContractClient {
           // Fallback: try to get the raw address bytes and convert
           try {
             const addr = scVal.address();
-            // ScAddress has a toXDR() method that returns bytes
-            const addrBytes = addr.toXDR();
             // Try to create Address from bytes
             const addrObj = Address.fromScAddress(addr);
             return addrObj.toString();

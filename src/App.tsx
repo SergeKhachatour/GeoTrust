@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './App.css';
@@ -72,13 +72,14 @@ const App: React.FC = () => {
         zoom: 2,
       });
 
-      map.current.on('load', () => {
+      const handleMapLoad = () => {
         console.log('[App] Map loaded successfully');
         if (map.current) {
           loadCountryOverlay();
           // Admin check will happen automatically via useEffect when wallet and client are ready
         }
-      });
+      };
+      map.current.on('load', handleMapLoad);
 
       map.current.on('error', (e) => {
         console.error('[App] Map error:', e);
@@ -97,7 +98,7 @@ const App: React.FC = () => {
         map.current = null;
       }
     };
-  }, []);
+  }, [loadCountryOverlay]);
 
   useEffect(() => {
     if (map.current && allowedCountries.size > 0) {
@@ -154,7 +155,75 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet, contractClient]);
 
-  const loadCountryOverlay = async () => {
+  const updateCountryOverlay = useCallback(() => {
+    if (!map.current || !map.current.getSource('countries')) return;
+
+    const source = map.current.getSource('countries') as mapboxgl.GeoJSONSource;
+    const data = source._data as GeoJSON.FeatureCollection;
+
+    if (!data || !data.features) return;
+
+    data.features.forEach((feature) => {
+      // Ensure properties object exists
+      if (!feature.properties) {
+        feature.properties = {};
+      }
+      
+      // Try ISO_NUMERIC first, then convert from ISO2/ISO3
+      let countryCode = feature.properties.ISO_NUMERIC;
+      if (!countryCode) {
+        // Check feature-level id (ISO3) and properties
+        const iso3 = feature.id;
+        const iso2 = feature.properties?.ISO2;
+        
+        if (iso2) {
+          countryCode = iso2ToNumeric(iso2);
+        } else if (iso3) {
+          // Convert ISO3 to ISO2 first, then to numeric
+          // Ensure iso3 is a string
+          const iso3Str = typeof iso3 === 'string' ? iso3 : String(iso3);
+          const iso2FromIso3 = iso3ToIso2(iso3Str);
+          if (iso2FromIso3) {
+            countryCode = iso2ToNumeric(iso2FromIso3);
+          }
+        }
+        
+        // Store it for future use
+        if (countryCode) {
+          feature.properties.ISO_NUMERIC = countryCode;
+        }
+      }
+      
+      let allowed: boolean;
+      
+      if (countryCode) {
+        // Convert to number if it's a string
+        const code = typeof countryCode === 'string' ? parseInt(countryCode, 10) : countryCode;
+        
+        // Logic: 
+        // - If defaultAllowAll is true: country is allowed UNLESS it's in the denied list (allowedCountries acts as denylist)
+        // - If defaultAllowAll is false: country is allowed ONLY if it's in the allowed list
+        if (defaultAllowAll) {
+          // Default allow all: allowedCountries is actually a denylist
+          allowed = !allowedCountries.has(code);
+        } else {
+          // Default deny all: allowedCountries is an allowlist
+          allowed = allowedCountries.has(code);
+        }
+      } else {
+        // Set default for features without country code
+        allowed = defaultAllowAll;
+      }
+      
+      // Always set allowed as a boolean
+      feature.properties.allowed = Boolean(allowed);
+    });
+
+    // Update the source with modified data
+    source.setData(data);
+  }, [defaultAllowAll, allowedCountries]);
+
+  const loadCountryOverlay = useCallback(async () => {
     // Load countries GeoJSON
     // For MVP, we'll use a simplified approach
     // In production, load from a bundled GeoJSON file
@@ -295,7 +364,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Failed to load countries GeoJSON:', error);
     }
-  };
+  }, [defaultAllowAll, allowedCountries, updateCountryOverlay]);
 
   const updateCountryOverlay = () => {
     if (!map.current || !map.current.getSource('countries')) return;
