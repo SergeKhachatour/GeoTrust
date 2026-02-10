@@ -367,7 +367,8 @@ const App: React.FC = () => {
       // Don't cleanup map here - let it persist across re-renders
       // Only cleanup on unmount
     };
-  }, []); // Empty deps - only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount (initializeMap changes when country policy changes, but we don't want to re-initialize the map)
 
   useEffect(() => {
     if (map.current && allowedCountries.size > 0) {
