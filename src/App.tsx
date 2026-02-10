@@ -253,14 +253,26 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Wait for the ref to be attached to the DOM
-    if (!mapContainer.current || map.current) return;
+    // Use a small delay to ensure the ref is attached
+    const timer = setTimeout(() => {
+      if (!mapContainer.current || map.current) {
+        return;
+      }
+      
+      // Get the container and verify it has a style property
+      const container = mapContainer.current;
+      if (!container || typeof container.style === 'undefined') {
+        console.warn('[App] Map container not ready yet');
+        return;
+      }
+      
+      initializeMap(container);
+    }, 0);
     
-    // Get the container and verify it has a style property
-    const container = mapContainer.current;
-    if (!container || typeof container.style === 'undefined') {
-      console.warn('[App] Map container not ready yet');
-      return;
-    }
+    return () => clearTimeout(timer);
+  }, []); // Empty deps - map should only initialize once
+  
+  const initializeMap = useCallback((container: HTMLDivElement) => {
 
     // Check if Mapbox token is available
     const token = process.env.REACT_APP_MAPBOX_TOKEN;
@@ -328,7 +340,7 @@ const App: React.FC = () => {
         map.current = null;
       }
     };
-  }, [loadCountryOverlay]);
+  }, []); // Empty deps - initializeMap should be stable
 
   useEffect(() => {
     if (map.current && allowedCountries.size > 0) {
