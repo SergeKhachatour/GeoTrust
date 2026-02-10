@@ -1036,7 +1036,7 @@ const App: React.FC = () => {
       {selectedMarker && (
         <div className="marker-popup-overlay" onClick={() => setSelectedMarker(null)}>
           <div className="marker-popup" onClick={(e) => e.stopPropagation()}>
-            <button className="marker-popup-close" onClick={() => setSelectedMarker(null)}>├ù</button>
+            <button className="marker-popup-close" onClick={() => setSelectedMarker(null)}>×</button>
             <h3>{selectedMarker.type === 'player' ? 'Your Profile' : 'Player Profile'}</h3>
             <div className="marker-popup-content">
               <div className="marker-popup-field">
