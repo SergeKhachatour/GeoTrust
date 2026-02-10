@@ -255,9 +255,9 @@ const App: React.FC = () => {
     // Wait for the ref to be attached to the DOM
     if (!mapContainer.current || map.current) return;
     
-    // Double-check that the element exists and has style property
+    // Get the container and verify it has a style property
     const container = mapContainer.current;
-    if (!container || !container.style) {
+    if (!container || typeof container.style === 'undefined') {
       console.warn('[App] Map container not ready yet');
       return;
     }
@@ -270,12 +270,6 @@ const App: React.FC = () => {
     }
 
     // Ensure map container is visible and properly sized
-    const container = mapContainer.current;
-    if (!container) {
-      console.warn('[App] Map container ref is not available');
-      return;
-    }
-    
     container.style.display = 'block';
     container.style.width = '100%';
     container.style.height = '100%';
