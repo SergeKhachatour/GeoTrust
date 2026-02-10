@@ -6,7 +6,7 @@ import { Wallet } from './wallet';
 import { ContractClient } from './contract';
 import { AdminPanel } from './AdminPanel';
 import { GamePanel } from './GamePanel';
-import { iso2ToNumeric } from './countryCodes';
+import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 
 // Set Mapbox access token
 const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
