@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { ContractClient } from './contract';
+import { iso2ToNumeric } from './countryCodes';
 
 interface AdminPanelProps {
   contractClient: ContractClient;
@@ -31,9 +32,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           if (geojson.features) {
             const countries = geojson.features
               .map((feature: any) => {
-                const code = feature.properties?.ISO_NUMERIC;
-                const name = feature.properties?.NAME;
-                const iso2 = feature.properties?.ISO2;
+                // Try ISO_NUMERIC first, then convert from ISO2 (id field)
+                let code = feature.properties?.ISO_NUMERIC;
+                const name = feature.properties?.name || feature.properties?.NAME;
+                const iso2 = feature.properties?.id || feature.properties?.ISO2;
+                
+                // If no ISO_NUMERIC, convert from ISO2
+                if (!code && iso2) {
+                  code = iso2ToNumeric(iso2);
+                }
+                
                 if (code && name) {
                   return { code: Number(code), name: String(name), iso2: String(iso2 || '') };
                 }
