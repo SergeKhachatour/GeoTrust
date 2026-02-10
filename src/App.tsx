@@ -186,9 +186,19 @@ const App: React.FC = () => {
           }
           // Set default allowed value (will be updated by updateCountryOverlay)
           const countryCode = feature.properties.ISO_NUMERIC;
-          const allowed = countryCode 
-            ? (defaultAllowAll ? !allowedCountries.has(countryCode) : allowedCountries.has(countryCode))
-            : defaultAllowAll;
+          let allowed: boolean;
+          
+          if (countryCode) {
+            const code = typeof countryCode === 'string' ? parseInt(countryCode, 10) : countryCode;
+            if (defaultAllowAll) {
+              allowed = !allowedCountries.has(code);
+            } else {
+              allowed = allowedCountries.has(code);
+            }
+          } else {
+            allowed = defaultAllowAll;
+          }
+          
           feature.properties.allowed = Boolean(allowed);
         });
       }
@@ -201,6 +211,7 @@ const App: React.FC = () => {
           data: geojson,
         });
 
+        // Add fill layer with very light opacity (mostly transparent)
         map.current.addLayer({
           id: 'countries-fill',
           type: 'fill',
@@ -212,22 +223,44 @@ const App: React.FC = () => {
               [
                 'case',
                 ['get', 'allowed'],
-                'rgba(0, 255, 0, 0.3)',
-                'rgba(255, 0, 0, 0.1)',
+                'rgba(0, 255, 0, 0.1)', // Very light green for allowed
+                'rgba(255, 0, 0, 0.05)', // Very light red for denied
               ],
-              'rgba(128, 128, 128, 0.1)', // Default gray for null/undefined
+              'rgba(128, 128, 128, 0.05)', // Default gray for null/undefined
             ],
-            'fill-opacity': 0.5,
+            'fill-opacity': 0.3,
           },
         });
 
+        // Add outline layer with colored borders based on allowed status
         map.current.addLayer({
           id: 'countries-outline',
           type: 'line',
           source: 'countries',
           paint: {
-            'line-color': '#888',
-            'line-width': 1,
+            'line-color': [
+              'case',
+              ['==', ['typeof', ['get', 'allowed']], 'boolean'],
+              [
+                'case',
+                ['get', 'allowed'],
+                '#00FF00', // Green border for allowed
+                '#FF0000', // Red border for denied
+              ],
+              '#888888', // Gray border for unknown
+            ],
+            'line-width': [
+              'case',
+              ['==', ['typeof', ['get', 'allowed']], 'boolean'],
+              [
+                'case',
+                ['get', 'allowed'],
+                3, // Thicker green border for allowed
+                2, // Thinner red border for denied
+              ],
+              1, // Thin gray border for unknown
+            ],
+            'line-opacity': 0.8,
           },
         });
       }
@@ -257,9 +290,19 @@ const App: React.FC = () => {
       let allowed: boolean;
       
       if (countryCode) {
-        allowed = defaultAllowAll
-          ? !allowedCountries.has(countryCode)
-          : allowedCountries.has(countryCode);
+        // Convert to number if it's a string
+        const code = typeof countryCode === 'string' ? parseInt(countryCode, 10) : countryCode;
+        
+        // Logic: 
+        // - If defaultAllowAll is true: country is allowed UNLESS it's in the denied list (allowedCountries acts as denylist)
+        // - If defaultAllowAll is false: country is allowed ONLY if it's in the allowed list
+        if (defaultAllowAll) {
+          // Default allow all: allowedCountries is actually a denylist
+          allowed = !allowedCountries.has(code);
+        } else {
+          // Default deny all: allowedCountries is an allowlist
+          allowed = allowedCountries.has(code);
+        }
       } else {
         // Set default for features without country code
         allowed = defaultAllowAll;

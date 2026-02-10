@@ -10,19 +10,6 @@ interface AdminPanelProps {
   map: mapboxgl.Map | null;
 }
 
-// Simplified country list - in production, use a complete mapping
-const COUNTRY_LIST: Array<{ code: number; name: string; iso2: string }> = [
-  { code: 840, name: 'United States', iso2: 'US' },
-  { code: 826, name: 'United Kingdom', iso2: 'GB' },
-  { code: 124, name: 'Canada', iso2: 'CA' },
-  { code: 36, name: 'Australia', iso2: 'AU' },
-  { code: 276, name: 'Germany', iso2: 'DE' },
-  { code: 250, name: 'France', iso2: 'FR' },
-  { code: 392, name: 'Japan', iso2: 'JP' },
-  { code: 156, name: 'China', iso2: 'CN' },
-  // Add more countries as needed
-];
-
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   contractClient,
   allowedCountries,
@@ -32,8 +19,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [countryList, setCountryList] = useState<Array<{ code: number; name: string; iso2: string }>>([]);
 
-  const filteredCountries = COUNTRY_LIST.filter((country) =>
+  // Load countries from GeoJSON file
+  useEffect(() => {
+    const loadCountries = async () => {
+      try {
+        const response = await fetch('/countries.geojson');
+        if (response.ok) {
+          const geojson = await response.json();
+          if (geojson.features) {
+            const countries = geojson.features
+              .map((feature: any) => {
+                const code = feature.properties?.ISO_NUMERIC;
+                const name = feature.properties?.NAME;
+                const iso2 = feature.properties?.ISO2;
+                if (code && name) {
+                  return { code: Number(code), name: String(name), iso2: String(iso2 || '') };
+                }
+                return null;
+              })
+              .filter((c: any) => c !== null)
+              .sort((a: any, b: any) => a.name.localeCompare(b.name));
+            setCountryList(countries);
+            console.log('[AdminPanel] Loaded', countries.length, 'countries from GeoJSON');
+          }
+        } else {
+          console.warn('[AdminPanel] Failed to load countries.geojson');
+        }
+      } catch (error) {
+        console.error('[AdminPanel] Error loading countries:', error);
+      }
+    };
+    loadCountries();
+  }, []);
+
+  const filteredCountries = countryList.filter((country) =>
     country.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
