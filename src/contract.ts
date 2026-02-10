@@ -270,13 +270,15 @@ export class ContractClient {
         return xdr.ScVal.scvBool(arg);
       }
       if (typeof arg === 'string') {
-        // Check if it's an address (Stellar address format: starts with G and is 56 chars)
-        if (arg.length === 56 && arg.startsWith('G')) {
+        // Check if it's an address (Stellar address format: starts with G or C and is 56 chars)
+        // G = account address, C = contract ID
+        if (arg.length === 56 && (arg.startsWith('G') || arg.startsWith('C'))) {
           try {
             const addr = Address.fromString(arg);
             return addr.toScVal();
           } catch (e) {
             // If not a valid address, treat as regular string
+            console.warn(`[ContractClient] Failed to convert string to Address: ${arg}`, e);
             return xdr.ScVal.scvString(arg);
           }
         }
