@@ -33,6 +33,14 @@
   overflow: hidden;
 }
 
+/* On mobile, prevent minimizing when no wallet is connected */
+@media (max-width: 768px) {
+  .overlay:not(:has(.wallet-status)) .overlay.minimized {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 .overlay-header {
   display: flex;
   justify-content: space-between;
@@ -475,6 +483,12 @@
     right: 10px;
     max-width: 100%;
     width: calc(100% - 20px);
+  }
+
+  /* Ensure overlay is not minimized on mobile when no wallet is connected */
+  .overlay.minimized:not(:has(.wallet-status)) {
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .overlay-header {

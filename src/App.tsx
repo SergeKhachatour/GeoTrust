@@ -970,13 +970,16 @@ const App: React.FC = () => {
                 ✕
               </button>
             )}
-            <button 
-              className="icon-button" 
-              onClick={() => setOverlayMinimized(!overlayMinimized)} 
-              title={overlayMinimized ? "Restore" : "Minimize"}
-            >
-              {overlayMinimized ? '□' : '−'}
-            </button>
+            {/* Hide minimize button on mobile when no wallet is connected */}
+            {wallet && (
+              <button 
+                className="icon-button" 
+                onClick={() => setOverlayMinimized(!overlayMinimized)} 
+                title={overlayMinimized ? "Restore" : "Minimize"}
+              >
+                {overlayMinimized ? '□' : '−'}
+              </button>
+            )}
           </div>
         </div>
         {!overlayMinimized && (
