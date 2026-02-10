@@ -9,12 +9,22 @@ Azure Web App shows "Your web app is running and waiting for your content" becau
 
 1. Go to **Azure Portal** → **GeoTrust** → **Configuration** → **General settings**
 2. Find **Startup Command**
-3. Set it to:
+3. Set it to one of these options:
+
+   **Option A (Recommended - uses npm script):**
+   ```
+   npm run start:prod
+   ```
+   
+   **Option B (Direct command):**
    ```
    npm install -g serve && serve -s build -l 8080
    ```
+
 4. Click **Save**
 5. Go to **Overview** → **Restart**
+
+**Note:** `npm start` won't work because it runs the development server. Use `npm run start:prod` instead, which serves the built static files.
 
 ### Option 2: Use web.config (Windows) or .htaccess (Linux)
 
