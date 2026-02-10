@@ -4,7 +4,7 @@
 
 1. **Visit your app URL:**
    ```
-   https://geotrust-avc5e4gvhrd8acdr.westus-01.azurewebsites.net
+   https://geotrust.stellargeolink.com
    ```
 
 2. **What to look for:**
@@ -57,5 +57,5 @@
 ## 🔗 Useful Azure Links
 
 - **Log Stream**: Azure Portal → GeoTrust → Log stream
-- **Kudu Console**: `https://geotrust-avc5e4gvhrd8acdr.scm.westus-01.azurewebsites.net`
+- **Kudu Console**: `https://geotrust.scm.stellargeolink.com` (or check Azure Portal for the actual SCM URL)
 - **Application Settings**: Azure Portal → GeoTrust → Configuration → Application settings

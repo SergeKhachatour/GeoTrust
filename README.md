@@ -1,9 +1,9 @@
 # GeoTrust Match
 
 [![Deploy to Azure](https://img.shields.io/badge/Deploy%20to-Azure-blue)](https://portal.azure.com)
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Azure%20Web%20App-green)](https://geotrust-avc5e4gvhrd8acdr.westus-01.azurewebsites.net)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Live%20Site-green)](https://geotrust.stellargeolink.com)
 
-**Live on Azure**: https://geotrust-avc5e4gvhrd8acdr.westus-01.azurewebsites.net
+**Live Site**: https://geotrust.stellargeolink.com
 
 On-chain location-based matching game built on Stellar Soroban with country gating and ZK proofs.
 
@@ -139,7 +139,7 @@ Frontend converts ISO2 codes from Mapbox Geocoding API to numeric codes.
 
 This app is deployed to Azure App Service. See [DEPLOYMENT_AZURE.md](./DEPLOYMENT_AZURE.md) for detailed deployment instructions.
 
-**Live URL**: https://geotrust-avc5e4gvhrd8acdr.westus-01.azurewebsites.net
+**Live URL**: https://geotrust.stellargeolink.com
 
 **Quick Setup:**
 1. Set environment variables in Azure Portal (Configuration → Application settings)

@@ -83,7 +83,7 @@ The workflow is already configured. Just add the secrets above and it will deplo
 
 ### Verify Deployment
 
-1. Visit: `https://geotrust-avc5e4gvhrd8acdr.westus-01.azurewebsites.net`
+1. Visit: `https://geotrust.stellargeolink.com`
 2. Open browser console (F12)
 3. Check for:
    - ✅ Mapbox token loaded
@@ -127,4 +127,4 @@ The workflow is already configured. Just add the secrets above and it will deplo
 
 - **Azure Portal**: https://portal.azure.com
 - **GitHub Repo**: https://github.com/SergeKhachatour/GeoTrust
-- **App URL**: https://geotrust-avc5e4gvhrd8acdr.westus-01.azurewebsites.net
+- **App URL**: https://geotrust.stellargeolink.com

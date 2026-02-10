@@ -44,7 +44,7 @@ Go to: **GitHub Repo** → **Settings** → **Secrets and variables** → **Acti
 
 1. Push any change to `main` branch to trigger deployment
 2. Check **Actions** tab in GitHub to see deployment progress
-3. Visit your app URL to verify: https://geotrust-avc5e4gvhrd8acdr.westus-01.azurewebsites.net
+3. Visit your app URL to verify: https://geotrust.stellargeolink.com
 
 ## Note
 

@@ -99,7 +99,7 @@ Or use Azure's built-in Node.js build:
 
 ## Step 6: Verify Deployment
 
-1. Go to your Web App URL: `https://geotrust-avc5e4gvhrd8acdr.westus-01.azurewebsites.net`
+1. Go to your Web App URL: `https://geotrust.stellargeolink.com`
 2. Check browser console for any errors
 3. Verify environment variables are loaded (check Network tab for API calls)
 

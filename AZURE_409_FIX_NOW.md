@@ -1,5 +1,7 @@
 # Fix Azure 409 Conflict Error - Immediate Steps
 
+**Note**: Your app is now live at: https://geotrust.stellargeolink.com
+
 ## Current Issue
 You're getting `Conflict (CODE: 409)` which means Azure has the app locked, likely due to:
 - An ongoing deployment from a previous attempt
