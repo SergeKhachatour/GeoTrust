@@ -197,7 +197,9 @@ const App: React.FC = () => {
               countryCode = iso2ToNumeric(iso2);
             } else if (iso3) {
               // Convert ISO3 to ISO2 first, then to numeric
-              const iso2FromIso3 = iso3ToIso2(iso3);
+              // Ensure iso3 is a string
+              const iso3Str = typeof iso3 === 'string' ? iso3 : String(iso3);
+              const iso2FromIso3 = iso3ToIso2(iso3Str);
               if (iso2FromIso3) {
                 countryCode = iso2ToNumeric(iso2FromIso3);
               }
@@ -320,7 +322,9 @@ const App: React.FC = () => {
           countryCode = iso2ToNumeric(iso2);
         } else if (iso3) {
           // Convert ISO3 to ISO2 first, then to numeric
-          const iso2FromIso3 = iso3ToIso2(iso3);
+          // Ensure iso3 is a string
+          const iso3Str = typeof iso3 === 'string' ? iso3 : String(iso3);
+          const iso2FromIso3 = iso3ToIso2(iso3Str);
           if (iso2FromIso3) {
             countryCode = iso2ToNumeric(iso2FromIso3);
           }
