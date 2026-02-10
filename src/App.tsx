@@ -269,7 +269,14 @@ const App: React.FC = () => {
       initializeMap(container);
     }, 0);
     
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // Cleanup map if it exists
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
+    };
   }, []); // Empty deps - map should only initialize once
   
   const initializeMap = useCallback((container: HTMLDivElement) => {
