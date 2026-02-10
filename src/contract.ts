@@ -159,6 +159,7 @@ export class ContractClient {
     locationProof?: { proof: Uint8Array; publicInputs: number[] }
   ): Promise<void> {
     // First, verify the session exists before trying to join
+    // Use read-only getSession which doesn't affect sequence number
     try {
       const session = await this.getSession(sessionId);
       if (!session) {
@@ -169,6 +170,10 @@ export class ContractClient {
       console.error('[ContractClient] Error checking session before join:', error);
       throw new Error(`Cannot join session ${sessionId}: ${error instanceof Error ? error.message : 'Session not found'}`);
     }
+    
+    // Add a small delay to ensure account sequence is fresh after createSession
+    // This helps prevent txBadSeq errors
+    await new Promise(resolve => setTimeout(resolve, 1000));
     console.log('[ContractClient] Joining session:', {
       sessionId,
       cellId,

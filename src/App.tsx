@@ -428,6 +428,8 @@ const App: React.FC = () => {
   const connectWallet = async () => {
     try {
       setWalletError(null);
+      setIsCheckingIn(false);
+      hasCheckedInRef.current = false; // Reset check-in flag
       const w = new Wallet();
       await w.connect();
       const address = await w.getPublicKey();
@@ -435,7 +437,12 @@ const App: React.FC = () => {
       setWalletAddress(address);
       const client = new ContractClient(w);
       setContractClient(client);
-      // Admin check will happen automatically via useEffect when wallet and client are set
+      // Explicitly call checkAdminStatus after connection
+      // Small delay to ensure client is fully initialized
+      setTimeout(() => {
+        checkAdminStatus();
+        fetchCountryPolicy();
+      }, 500);
     } catch (error: any) {
       console.error('Failed to connect wallet:', error);
       setWalletError(error.message || 'Failed to connect wallet. Please install Freighter extension.');
@@ -453,7 +460,13 @@ const App: React.FC = () => {
       setIsAdmin(false);
       setPlayerLocation(null);
       setSessionLink('');
+      setWalletError(null);
       hasCheckedInRef.current = false;
+      // Ensure overlay is expanded on mobile after disconnect
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        setOverlayMinimized(false);
+      }
     } catch (error) {
       console.error('Failed to disconnect wallet:', error);
     }
@@ -521,9 +534,9 @@ const App: React.FC = () => {
               const sessionId = await contractClient.createSession();
               console.log('[App] Session created, ID:', sessionId);
               
-              // Additional delay to ensure session is fully persisted (transaction waiting handles most of this)
-              // Increased delay to ensure session is available in contract storage
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              // Additional delay to ensure session is fully persisted and account sequence is refreshed
+              // Wait for transaction to be included and then wait a bit more for ledger state to settle
+              await new Promise(resolve => setTimeout(resolve, 5000));
               
               console.log('[App] Joining session:', { sessionId, cellId, countryCode });
 
@@ -972,13 +985,27 @@ const App: React.FC = () => {
 
   // Ensure overlay is expanded on mobile when no wallet is connected
   useEffect(() => {
-    if (!wallet && overlayMinimized) {
+    if (!wallet) {
       // On mobile, always expand overlay when no wallet is connected
       const isMobile = window.innerWidth <= 768;
-      if (isMobile) {
+      if (isMobile && overlayMinimized) {
         setOverlayMinimized(false);
       }
     }
+  }, [wallet, overlayMinimized]);
+
+  // Ensure overlay stays visible on mobile - check on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile && !wallet && overlayMinimized) {
+        setOverlayMinimized(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    // Also check immediately
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
   }, [wallet, overlayMinimized]);
 
   return (
