@@ -38,122 +38,7 @@ const App: React.FC = () => {
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const hasCheckedInRef = useRef(false);
 
-  useEffect(() => {
-    if (!mapContainer.current || map.current) return;
-
-    // Check if Mapbox token is available
-    const token = process.env.REACT_APP_MAPBOX_TOKEN;
-    if (!token) {
-      console.error('[App] Mapbox token not found! Check .env.local file');
-      return;
-    }
-
-    // Ensure map container is visible and properly sized
-    if (mapContainer.current) {
-      mapContainer.current.style.display = 'block';
-      mapContainer.current.style.width = '100%';
-      mapContainer.current.style.height = '100%';
-      mapContainer.current.style.position = 'absolute';
-      mapContainer.current.style.top = '0';
-      mapContainer.current.style.left = '0';
-      console.log('[App] Map container ready:', {
-        width: mapContainer.current.offsetWidth,
-        height: mapContainer.current.offsetHeight,
-        display: window.getComputedStyle(mapContainer.current).display
-      });
-    }
-
-    try {
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/light-v11',
-        projection: 'globe',
-        center: [0, 0],
-        zoom: 2,
-      });
-
-      const handleMapLoad = () => {
-        console.log('[App] Map loaded successfully');
-        if (map.current) {
-          loadCountryOverlay();
-          // Admin check will happen automatically via useEffect when wallet and client are ready
-        }
-      };
-      map.current.on('load', handleMapLoad);
-
-      map.current.on('error', (e) => {
-        console.error('[App] Map error:', e);
-      });
-
-      map.current.on('style.load', () => {
-        console.log('[App] Map style loaded');
-      });
-    } catch (error) {
-      console.error('[App] Failed to initialize map:', error);
-    }
-
-    return () => {
-      if (map.current) {
-        map.current.remove();
-        map.current = null;
-      }
-    };
-  }, [loadCountryOverlay]);
-
-  useEffect(() => {
-    if (map.current && allowedCountries.size > 0) {
-      updateCountryOverlay();
-    }
-  }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
-
-  // Restore wallet connection on page load
-  useEffect(() => {
-    const restoreWallet = async () => {
-      if (Wallet.wasConnected() && !wallet) {
-        try {
-          const w = new Wallet();
-          await w.connect();
-          const address = await w.getPublicKey();
-          setWallet(w);
-          setWalletAddress(address);
-          const client = new ContractClient(w);
-          setContractClient(client);
-          // Admin check will happen automatically via useEffect when wallet and client are set
-        } catch (error) {
-          console.log('Failed to restore wallet connection:', error);
-          // Clear invalid connection state
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('geotrust_wallet_connected');
-          }
-        }
-      }
-    };
-    restoreWallet();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Check admin status when wallet and contract client are ready
-  const hasCheckedAdmin = useRef(false);
-  useEffect(() => {
-    if (wallet && contractClient && !hasCheckedAdmin.current) {
-      hasCheckedAdmin.current = true;
-      console.log('[App] Wallet and contractClient ready, checking admin status...');
-      checkAdminStatus();
-      fetchCountryPolicy();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallet, contractClient]);
-
-  // Auto-checkin when wallet and contract client are ready
-  const hasCheckedIn = useRef(false);
-  useEffect(() => {
-    if (wallet && contractClient && !playerLocation && !isCheckingIn && !hasCheckedIn.current) {
-      hasCheckedIn.current = true;
-      autoCheckIn();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallet, contractClient]);
-
+  // Define updateCountryOverlay first (used by loadCountryOverlay)
   const updateCountryOverlay = useCallback(() => {
     if (!map.current || !map.current.getSource('countries')) return;
 
@@ -222,6 +107,7 @@ const App: React.FC = () => {
     source.setData(data);
   }, [defaultAllowAll, allowedCountries]);
 
+  // Define loadCountryOverlay (uses updateCountryOverlay)
   const loadCountryOverlay = useCallback(async () => {
     // Load countries GeoJSON
     // For MVP, we'll use a simplified approach
@@ -364,6 +250,123 @@ const App: React.FC = () => {
       console.error('Failed to load countries GeoJSON:', error);
     }
   }, [defaultAllowAll, allowedCountries, updateCountryOverlay]);
+
+  useEffect(() => {
+    if (!mapContainer.current || map.current) return;
+
+    // Check if Mapbox token is available
+    const token = process.env.REACT_APP_MAPBOX_TOKEN;
+    if (!token) {
+      console.error('[App] Mapbox token not found! Check .env.local file');
+      return;
+    }
+
+    // Ensure map container is visible and properly sized
+    if (mapContainer.current) {
+      mapContainer.current.style.display = 'block';
+      mapContainer.current.style.width = '100%';
+      mapContainer.current.style.height = '100%';
+      mapContainer.current.style.position = 'absolute';
+      mapContainer.current.style.top = '0';
+      mapContainer.current.style.left = '0';
+      console.log('[App] Map container ready:', {
+        width: mapContainer.current.offsetWidth,
+        height: mapContainer.current.offsetHeight,
+        display: window.getComputedStyle(mapContainer.current).display
+      });
+    }
+
+    try {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/light-v11',
+        projection: 'globe',
+        center: [0, 0],
+        zoom: 2,
+      });
+
+      const handleMapLoad = () => {
+        console.log('[App] Map loaded successfully');
+        if (map.current) {
+          loadCountryOverlay();
+          // Admin check will happen automatically via useEffect when wallet and client are ready
+        }
+      };
+      map.current.on('load', handleMapLoad);
+
+      map.current.on('error', (e) => {
+        console.error('[App] Map error:', e);
+      });
+
+      map.current.on('style.load', () => {
+        console.log('[App] Map style loaded');
+      });
+    } catch (error) {
+      console.error('[App] Failed to initialize map:', error);
+    }
+
+    return () => {
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
+    };
+  }, [loadCountryOverlay]);
+
+  useEffect(() => {
+    if (map.current && allowedCountries.size > 0) {
+      updateCountryOverlay();
+    }
+  }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
+
+  // Restore wallet connection on page load
+  useEffect(() => {
+    const restoreWallet = async () => {
+      if (Wallet.wasConnected() && !wallet) {
+        try {
+          const w = new Wallet();
+          await w.connect();
+          const address = await w.getPublicKey();
+          setWallet(w);
+          setWalletAddress(address);
+          const client = new ContractClient(w);
+          setContractClient(client);
+          // Admin check will happen automatically via useEffect when wallet and client are set
+        } catch (error) {
+          console.log('Failed to restore wallet connection:', error);
+          // Clear invalid connection state
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('geotrust_wallet_connected');
+          }
+        }
+      }
+    };
+    restoreWallet();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Check admin status when wallet and contract client are ready
+  const hasCheckedAdmin = useRef(false);
+  useEffect(() => {
+    if (wallet && contractClient && !hasCheckedAdmin.current) {
+      hasCheckedAdmin.current = true;
+      console.log('[App] Wallet and contractClient ready, checking admin status...');
+      checkAdminStatus();
+      fetchCountryPolicy();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet, contractClient]);
+
+  // Auto-checkin when wallet and contract client are ready
+  const hasCheckedIn = useRef(false);
+  useEffect(() => {
+    if (wallet && contractClient && !playerLocation && !isCheckingIn && !hasCheckedIn.current) {
+      hasCheckedIn.current = true;
+      autoCheckIn();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet, contractClient]);
+
 
   const connectWallet = async () => {
     try {
