@@ -333,13 +333,6 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('[App] Failed to initialize map:', error);
     }
-
-    return () => {
-      if (map.current) {
-        map.current.remove();
-        map.current = null;
-      }
-    };
   }, []); // Empty deps - initializeMap should be stable
 
   useEffect(() => {
