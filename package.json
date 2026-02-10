@@ -17,7 +17,8 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "serve": "serve -s build -l 8080"
+    "serve": "serve -s build -l 8080",
+    "azure-start": "npm install -g serve && serve -s build -l 8080"
   },
   "eslintConfig": {
     "extends": [
