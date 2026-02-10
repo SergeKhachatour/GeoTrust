@@ -252,7 +252,15 @@ const App: React.FC = () => {
   }, [defaultAllowAll, allowedCountries, updateCountryOverlay]);
 
   useEffect(() => {
+    // Wait for the ref to be attached to the DOM
     if (!mapContainer.current || map.current) return;
+    
+    // Double-check that the element exists and has style property
+    const container = mapContainer.current;
+    if (!container || !container.style) {
+      console.warn('[App] Map container not ready yet');
+      return;
+    }
 
     // Check if Mapbox token is available
     const token = process.env.REACT_APP_MAPBOX_TOKEN;
