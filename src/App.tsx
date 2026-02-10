@@ -1047,21 +1047,28 @@ const App: React.FC = () => {
                     Install Freighter Extension ΓåÆ
                   </a>
                 </p>
-                <button className="primary-button" onClick={() => setWalletError(null)} style={{ marginTop: '12px' }}>
+                <button className="primary-button" onClick={() => { setWalletError(null); connectWallet(); }} style={{ marginTop: '12px' }}>
                   Try Again
                 </button>
               </div>
             ) : !wallet ? (
-              <button className="primary-button" onClick={connectWallet}>
-                {isCheckingIn ? (
-                  <>
-                    <span className="loading-spinner"></span>
-                    Connecting...
-                  </>
-                ) : (
-                  'Connect Wallet'
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button className="primary-button" onClick={connectWallet} style={{ width: '100%' }}>
+                  {isCheckingIn ? (
+                    <>
+                      <span className="loading-spinner"></span>
+                      Connecting...
+                    </>
+                  ) : (
+                    'Connect Wallet'
+                  )}
+                </button>
+                {navigator.userAgent.match(/Mobile|Android|iPhone|iPad/) && (
+                  <p style={{ fontSize: '12px', color: '#666', textAlign: 'center', margin: 0 }}>
+                    Note: Freighter wallet is available as a browser extension. For mobile, use a browser that supports extensions.
+                  </p>
                 )}
-              </button>
+              </div>
             ) : (
               <>
                 <GamePanel
