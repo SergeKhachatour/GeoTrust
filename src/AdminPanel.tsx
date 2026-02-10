@@ -113,7 +113,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
 
       if (features.length > 0) {
-        const countryCode = features[0].properties?.ISO_NUMERIC;
+        let countryCode = features[0].properties?.ISO_NUMERIC;
+        if (!countryCode) {
+          // Check feature-level id (ISO3) and properties
+          const iso3 = features[0].id;
+          const iso2 = features[0].properties?.ISO2;
+          
+          if (iso2) {
+            countryCode = iso2ToNumeric(iso2);
+          } else if (iso3) {
+            // Convert ISO3 to ISO2 first, then to numeric
+            const iso2FromIso3 = iso3ToIso2(iso3);
+            if (iso2FromIso3) {
+              countryCode = iso2ToNumeric(iso2FromIso3);
+            }
+          }
+        }
         if (countryCode) {
           handleToggleCountry(countryCode);
         }
