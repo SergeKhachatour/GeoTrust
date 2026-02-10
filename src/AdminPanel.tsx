@@ -76,11 +76,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     country.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Determine if a country is currently allowed based on the policy
+  const isCountryAllowed = (countryCode: number): boolean => {
+    if (defaultAllowAll) {
+      // If default is allow all, allowedCountries acts as a denylist
+      // Country is allowed if it's NOT in the denylist
+      return !allowedCountries.has(countryCode);
+    } else {
+      // If default is deny all, allowedCountries acts as an allowlist
+      // Country is allowed if it IS in the allowlist
+      return allowedCountries.has(countryCode);
+    }
+  };
+
   const handleToggleCountry = async (countryCode: number) => {
     setIsLoading(true);
     try {
-      const isAllowed = allowedCountries.has(countryCode);
-      await contractClient.setCountryAllowed(countryCode, !isAllowed);
+      const currentlyAllowed = isCountryAllowed(countryCode);
+      // Toggle: if currently allowed, deny it; if currently denied, allow it
+      await contractClient.setCountryAllowed(countryCode, !currentlyAllowed);
       onCountryToggle();
     } catch (error) {
       console.error('Failed to toggle country:', error);
