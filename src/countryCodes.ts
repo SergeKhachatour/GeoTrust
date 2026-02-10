@@ -45,9 +45,7 @@ export const ISO2_TO_NUMERIC: Record<string, number> = {
   'TON': 776, 'TTO': 780, 'TUN': 788, 'TUR': 792, 'TKM': 795, 'TCA': 796, 'TUV': 798, 'UGA': 800,
   'UKR': 804, 'ARE': 784, 'GBR': 826, 'UMI': 840, 'USA': 840, 'URY': 858, 'UZB': 860, 'VUT': 548,
   'VEN': 862, 'VNM': 704, 'VIR': 850, 'WLF': 876, 'ESH': 732, 'YEM': 887, 'ZMB': 894, 'ZWE': 716,
-  'ALA': 248, 'ANT': 530, 'BVT': 74, 'IOT': 86, 'CCK': 166, 'CXR': 162, 'FLK': 238, 'HMD': 334,
-  'HKG': 344, 'MAC': 446, 'MSR': 500, 'PCN': 612, 'SGS': 239, 'SHN': 654, 'SPM': 666, 'TKL': 772,
-  'TCA': 796, 'UMI': 840, 'VAT': 336, 'VGB': 92, 'VIR': 850, 'WLF': 876
+  'ALA': 248, 'ANT': 530, 'BVT': 74
 };
 
 export function iso2ToNumeric(iso2: string): number {
