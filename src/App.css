@@ -466,3 +466,91 @@
   color: #FFD700;
   font-weight: 600;
 }
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .overlay {
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    max-width: 100%;
+    width: calc(100% - 20px);
+  }
+
+  .overlay-header {
+    padding: 10px;
+    font-size: 11px;
+  }
+
+  .wallet-status {
+    font-size: 11px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .wallet-address {
+    font-size: 10px;
+  }
+
+  .admin-badge {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+
+  .primary-button {
+    padding: 12px 20px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .game-panel,
+  .admin-panel {
+    min-width: auto;
+    width: 100%;
+    max-width: 100%;
+    padding: 16px;
+  }
+
+  .marker-popup {
+    min-width: 280px;
+    max-width: calc(100% - 40px);
+    padding: 20px;
+    margin: 20px;
+  }
+
+  .icon-button {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .overlay {
+    bottom: 5px;
+    left: 5px;
+    right: 5px;
+    width: calc(100% - 10px);
+  }
+
+  .overlay-header {
+    padding: 8px;
+    font-size: 10px;
+  }
+
+  .primary-button {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  .game-panel,
+  .admin-panel {
+    padding: 12px;
+  }
+
+  .marker-popup {
+    min-width: 260px;
+    padding: 16px;
+  }
+}
