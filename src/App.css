@@ -33,11 +33,23 @@
   overflow: hidden;
 }
 
+/* Prevent minimizing when no wallet is connected */
+.overlay.no-wallet.minimized {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
 /* On mobile, prevent minimizing when no wallet is connected */
 @media (max-width: 768px) {
-  .overlay:not(:has(.wallet-status)) .overlay.minimized {
-    max-height: none;
-    overflow: visible;
+  .overlay.no-wallet.minimized {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Fallback for browsers that don't support :has() */
+  .overlay:not(:has(.wallet-status)).minimized {
+    max-height: none !important;
+    overflow: visible !important;
   }
 }
 
@@ -486,6 +498,12 @@
   }
 
   /* Ensure overlay is not minimized on mobile when no wallet is connected */
+  .overlay.no-wallet.minimized {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Fallback for browsers that don't support :has() */
   .overlay.minimized:not(:has(.wallet-status)) {
     max-height: none !important;
     overflow: visible !important;
@@ -540,6 +558,13 @@
   }
 
   /* Ensure connect wallet button is always visible on mobile when no wallet */
+  .overlay.no-wallet .primary-button {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Fallback for browsers that don't support :has() */
   .overlay:not(:has(.wallet-status)) .primary-button {
     display: block !important;
     visibility: visible !important;
@@ -547,6 +572,12 @@
   }
 
   /* Prevent overlay from being minimized when no wallet is connected */
+  .overlay.no-wallet.minimized {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Fallback for browsers that don't support :has() */
   .overlay:not(:has(.wallet-status)).minimized {
     max-height: none !important;
     overflow: visible !important;

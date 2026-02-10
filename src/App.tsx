@@ -970,11 +970,22 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maxDistance, showOtherUsers]);
 
+  // Ensure overlay is expanded on mobile when no wallet is connected
+  useEffect(() => {
+    if (!wallet && overlayMinimized) {
+      // On mobile, always expand overlay when no wallet is connected
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        setOverlayMinimized(false);
+      }
+    }
+  }, [wallet, overlayMinimized]);
+
   return (
     <div className="App">
       <div ref={mapContainer} className="map-container" />
       
-      <div className={`overlay ${overlayMinimized ? 'minimized' : ''}`}>
+      <div className={`overlay ${overlayMinimized && wallet ? 'minimized' : ''} ${!wallet ? 'no-wallet' : ''}`}>
         <div className="overlay-header">
           {wallet && walletAddress && (
             <div className="wallet-status">
