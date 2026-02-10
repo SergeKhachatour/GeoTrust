@@ -277,7 +277,7 @@ const App: React.FC = () => {
         map.current = null;
       }
     };
-  }, []); // Empty deps - map should only initialize once
+  }, [initializeMap]); // Include initializeMap as dependency
   
   const initializeMap = useCallback((container: HTMLDivElement) => {
 
@@ -340,7 +340,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('[App] Failed to initialize map:', error);
     }
-  }, []); // Empty deps - initializeMap should be stable
+  }, [loadCountryOverlay]); // Include loadCountryOverlay as dependency
 
   useEffect(() => {
     if (map.current && allowedCountries.size > 0) {
