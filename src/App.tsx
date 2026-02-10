@@ -709,6 +709,7 @@ const App: React.FC = () => {
         // Automatically set verifier contract ID if available in env
         const verifierId = process.env.REACT_APP_VERIFIER_ID;
         console.log('[App] REACT_APP_VERIFIER_ID from env:', verifierId);
+        let verifierRejected = false;
         if (verifierId) {
           try {
             console.log('[App] Setting verifier contract:', verifierId);
@@ -721,7 +722,8 @@ const App: React.FC = () => {
             const errorMsg = error?.message || error?.toString() || 'Unknown error';
             // Don't show alert for user rejections or sequence errors
             if (errorMsg.includes('rejected by user') || errorMsg.includes('Transaction was rejected')) {
-              console.warn('[App] Verifier setup was cancelled by user - skipping');
+              console.warn('[App] Verifier setup was cancelled by user - skipping Game Hub to avoid sequence issues');
+              verifierRejected = true; // Mark as rejected to skip Game Hub
             } else if (errorMsg.includes('txBadSeq') || errorMsg.includes('already') || errorMsg.includes('set')) {
               console.warn('[App] Verifier may already be set or sequence issue - will retry later');
             } else {
@@ -732,33 +734,38 @@ const App: React.FC = () => {
           console.warn('[App] REACT_APP_VERIFIER_ID not set in environment');
         }
         
-        // Automatically set Game Hub contract ID if available in env
-        // Add delay to ensure sequence number is fresh after previous transaction
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const gameHubId = process.env.REACT_APP_GAME_HUB_ID;
-        console.log('[App] REACT_APP_GAME_HUB_ID from env:', gameHubId);
-        if (gameHubId) {
-          try {
-            console.log('[App] Setting Game Hub contract:', gameHubId);
-            await contractClient.setGameHub(gameHubId);
-            console.log('[App] Game Hub contract ID set successfully:', gameHubId);
-          } catch (error: any) {
-            console.error('[App] Failed to set Game Hub:', error);
-            const errorMsg = error?.message || error?.toString() || 'Unknown error';
-            // Don't show alert for user rejections or sequence errors
-            if (errorMsg.includes('rejected by user') || errorMsg.includes('Transaction was rejected')) {
-              console.warn('[App] Game Hub setup was cancelled by user - skipping');
-            } else if (errorMsg.includes('txBadSeq')) {
-              console.warn('[App] Sequence number issue - Game Hub setup will need to be done manually');
-            } else if (errorMsg.includes('already') || errorMsg.includes('set')) {
-              console.warn('[App] Game Hub may already be set');
-            } else {
-              console.warn('[App] Failed to set Game Hub (non-critical):', errorMsg);
+        // Only set Game Hub if verifier wasn't rejected (to avoid sequence number issues)
+        if (!verifierRejected) {
+          // Add delay to ensure sequence number is fresh after previous transaction
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Automatically set Game Hub contract ID if available in env
+          const gameHubId = process.env.REACT_APP_GAME_HUB_ID;
+          console.log('[App] REACT_APP_GAME_HUB_ID from env:', gameHubId);
+          if (gameHubId) {
+            try {
+              console.log('[App] Setting Game Hub contract:', gameHubId);
+              await contractClient.setGameHub(gameHubId);
+              console.log('[App] Game Hub contract ID set successfully:', gameHubId);
+            } catch (error: any) {
+              console.error('[App] Failed to set Game Hub:', error);
+              const errorMsg = error?.message || error?.toString() || 'Unknown error';
+              // Don't show alert for user rejections or sequence errors
+              if (errorMsg.includes('rejected by user') || errorMsg.includes('Transaction was rejected')) {
+                console.warn('[App] Game Hub setup was cancelled by user');
+              } else if (errorMsg.includes('txBadSeq')) {
+                console.warn('[App] Sequence number issue - Game Hub setup will need to be done manually later');
+              } else if (errorMsg.includes('already') || errorMsg.includes('set')) {
+                console.warn('[App] Game Hub may already be set');
+              } else {
+                console.warn('[App] Failed to set Game Hub (non-critical):', errorMsg);
+              }
             }
+          } else {
+            console.warn('[App] REACT_APP_GAME_HUB_ID not set in environment');
           }
         } else {
-          console.warn('[App] REACT_APP_GAME_HUB_ID not set in environment');
+          console.warn('[App] Skipping Game Hub setup because verifier transaction was rejected');
         }
       } else {
         setIsAdmin(false);
