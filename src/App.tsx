@@ -281,8 +281,13 @@ const App: React.FC = () => {
     });
 
     try {
+      if (!container) {
+        console.error('[App] Cannot create map: container is null');
+        return;
+      }
+      
       map.current = new mapboxgl.Map({
-        container: mapContainer.current,
+        container: container,
         style: 'mapbox://styles/mapbox/light-v11',
         projection: 'globe',
         center: [0, 0],
