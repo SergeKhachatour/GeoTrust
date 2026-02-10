@@ -37,14 +37,30 @@ jobs:
 
     - name: Wait for any ongoing deployments to complete
       run: |
-        echo "Waiting 10 seconds to allow any ongoing deployments to complete..."
-        sleep 10
+        echo "Waiting 30 seconds to allow any ongoing deployments to complete..."
+        sleep 30
 
     - name: Deploy to Azure Web App
+      id: deploy
       uses: azure/webapps-deploy@v3
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         package: ./build
-      continue-on-error: false
+      continue-on-error: true
+      timeout-minutes: 10
+
+    - name: Retry deployment if failed with 409
+      if: steps.deploy.outcome == 'failure'
+      run: |
+        echo "First deployment attempt failed. Waiting 60 seconds before retry..."
+        sleep 60
+      
+    - name: Retry Deploy to Azure Web App
+      if: steps.deploy.outcome == 'failure'
+      uses: azure/webapps-deploy@v3
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: ./build
       timeout-minutes: 10

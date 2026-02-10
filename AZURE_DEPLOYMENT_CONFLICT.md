@@ -32,7 +32,8 @@ Getting `Conflict (CODE: 409)` error when deploying to Azure Web App. This typic
 
 ## Prevention
 The workflow has been updated to:
-- Wait 10 seconds before deploying to allow ongoing deployments to complete
+- Wait 30 seconds before deploying to allow ongoing deployments to complete
+- Automatically retry once if deployment fails (waits 60 seconds before retry)
 - Set a timeout of 10 minutes for the deployment step
 
 ## Common Causes
