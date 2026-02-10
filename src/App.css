@@ -538,6 +538,19 @@
     height: 28px;
     font-size: 14px;
   }
+
+  /* Ensure connect wallet button is always visible on mobile when no wallet */
+  .overlay:not(:has(.wallet-status)) .primary-button {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Prevent overlay from being minimized when no wallet is connected */
+  .overlay:not(:has(.wallet-status)).minimized {
+    max-height: none !important;
+    overflow: visible !important;
+  }
 }
 
 @media (max-width: 480px) {
