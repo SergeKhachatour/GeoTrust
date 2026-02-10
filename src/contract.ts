@@ -261,11 +261,19 @@ export class ContractClient {
         break;
       } catch (error: any) {
         retries--;
-        if (retries === 0) throw error;
+        if (retries === 0) {
+          throw new Error(`Failed to get account after 3 retries: ${error.message || error}`);
+        }
         console.warn(`[ContractClient.call] Failed to get account, retrying... (${retries} left)`);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
+    
+    // TypeScript guard: sourceAccount should always be set here, but add check for safety
+    if (!sourceAccount) {
+      throw new Error('Failed to get account: sourceAccount is undefined');
+    }
+    
     console.log(`[ContractClient.call] Account sequence for ${functionName}:`, sourceAccount.sequenceNumber());
     
     // Convert all arguments to ScVal
