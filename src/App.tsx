@@ -319,6 +319,53 @@ const App: React.FC = () => {
   }, [loadCountryOverlay]); // Include loadCountryOverlay as dependency
 
   useEffect(() => {
+    console.log('[App] Map initialization useEffect running');
+    
+    // Wait for the ref to be attached to the DOM
+    // Use a small delay to ensure the ref is attached
+    const timer = setTimeout(() => {
+      console.log('[App] Map initialization timer fired');
+      console.log('[App] mapContainer.current:', mapContainer.current);
+      console.log('[App] map.current:', map.current);
+      
+      if (!mapContainer.current) {
+        console.warn('[App] mapContainer.current is null');
+        return;
+      }
+      
+      if (map.current) {
+        console.log('[App] Map already exists, skipping initialization');
+        return;
+      }
+      
+      // Get the container and verify it has a style property
+      const container = mapContainer.current;
+      if (!container) {
+        console.warn('[App] Container is null');
+        return;
+      }
+      
+      if (typeof container.style === 'undefined') {
+        console.warn('[App] Container style property is undefined');
+        return;
+      }
+      
+      console.log('[App] Calling initializeMap');
+      initializeMap(container);
+    }, 100); // Increased delay to 100ms to ensure DOM is ready
+    
+    return () => {
+      clearTimeout(timer);
+      // Cleanup map if it exists
+      if (map.current) {
+        console.log('[App] Cleaning up map');
+        map.current.remove();
+        map.current = null;
+      }
+    };
+  }, [initializeMap]); // Include initializeMap as dependency
+
+  useEffect(() => {
     if (map.current && allowedCountries.size > 0) {
       updateCountryOverlay();
     }
