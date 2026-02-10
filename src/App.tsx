@@ -104,8 +104,7 @@ const App: React.FC = () => {
     if (map.current && allowedCountries.size > 0) {
       updateCountryOverlay();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowedCountries, defaultAllowAll]);
+  }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
 
   // Restore wallet connection on page load
   useEffect(() => {
@@ -365,74 +364,6 @@ const App: React.FC = () => {
       console.error('Failed to load countries GeoJSON:', error);
     }
   }, [defaultAllowAll, allowedCountries, updateCountryOverlay]);
-
-  const updateCountryOverlay = () => {
-    if (!map.current || !map.current.getSource('countries')) return;
-
-    const source = map.current.getSource('countries') as mapboxgl.GeoJSONSource;
-    const data = source._data as GeoJSON.FeatureCollection;
-
-    if (!data || !data.features) return;
-
-    data.features.forEach((feature) => {
-      // Ensure properties object exists
-      if (!feature.properties) {
-        feature.properties = {};
-      }
-      
-      // Try ISO_NUMERIC first, then convert from ISO2/ISO3
-      let countryCode = feature.properties.ISO_NUMERIC;
-      if (!countryCode) {
-        // Check feature-level id (ISO3) and properties
-        const iso3 = feature.id;
-        const iso2 = feature.properties?.ISO2;
-        
-        if (iso2) {
-          countryCode = iso2ToNumeric(iso2);
-        } else if (iso3) {
-          // Convert ISO3 to ISO2 first, then to numeric
-          // Ensure iso3 is a string
-          const iso3Str = typeof iso3 === 'string' ? iso3 : String(iso3);
-          const iso2FromIso3 = iso3ToIso2(iso3Str);
-          if (iso2FromIso3) {
-            countryCode = iso2ToNumeric(iso2FromIso3);
-          }
-        }
-        
-        // Store it for future use
-        if (countryCode) {
-          feature.properties.ISO_NUMERIC = countryCode;
-        }
-      }
-      
-      let allowed: boolean;
-      
-      if (countryCode) {
-        // Convert to number if it's a string
-        const code = typeof countryCode === 'string' ? parseInt(countryCode, 10) : countryCode;
-        
-        // Logic: 
-        // - If defaultAllowAll is true: country is allowed UNLESS it's in the denied list (allowedCountries acts as denylist)
-        // - If defaultAllowAll is false: country is allowed ONLY if it's in the allowed list
-        if (defaultAllowAll) {
-          // Default allow all: allowedCountries is actually a denylist
-          allowed = !allowedCountries.has(code);
-        } else {
-          // Default deny all: allowedCountries is an allowlist
-          allowed = allowedCountries.has(code);
-        }
-      } else {
-        // Set default for features without country code
-        allowed = defaultAllowAll;
-      }
-      
-      // Always set allowed as a boolean
-      feature.properties.allowed = Boolean(allowed);
-    });
-
-    // Update the source with modified data
-    source.setData(data);
-  };
 
   const connectWallet = async () => {
     try {
