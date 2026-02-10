@@ -262,19 +262,23 @@ const App: React.FC = () => {
     }
 
     // Ensure map container is visible and properly sized
-    if (mapContainer.current) {
-      mapContainer.current.style.display = 'block';
-      mapContainer.current.style.width = '100%';
-      mapContainer.current.style.height = '100%';
-      mapContainer.current.style.position = 'absolute';
-      mapContainer.current.style.top = '0';
-      mapContainer.current.style.left = '0';
-      console.log('[App] Map container ready:', {
-        width: mapContainer.current.offsetWidth,
-        height: mapContainer.current.offsetHeight,
-        display: window.getComputedStyle(mapContainer.current).display
-      });
+    const container = mapContainer.current;
+    if (!container) {
+      console.warn('[App] Map container ref is not available');
+      return;
     }
+    
+    container.style.display = 'block';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.position = 'absolute';
+    container.style.top = '0';
+    container.style.left = '0';
+    console.log('[App] Map container ready:', {
+      width: container.offsetWidth,
+      height: container.offsetHeight,
+      display: window.getComputedStyle(container).display
+    });
 
     try {
       map.current = new mapboxgl.Map({
