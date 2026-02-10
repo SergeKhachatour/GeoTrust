@@ -319,6 +319,12 @@ const App: React.FC = () => {
   }, [loadCountryOverlay]); // Include loadCountryOverlay as dependency
 
   useEffect(() => {
+    // Only initialize map once - if map already exists, don't re-initialize
+    if (map.current) {
+      console.log('[App] Map already exists, skipping initialization');
+      return;
+    }
+    
     console.log('[App] Map initialization useEffect running');
     
     // Wait for the ref to be attached to the DOM
@@ -328,13 +334,14 @@ const App: React.FC = () => {
       console.log('[App] mapContainer.current:', mapContainer.current);
       console.log('[App] map.current:', map.current);
       
-      if (!mapContainer.current) {
-        console.warn('[App] mapContainer.current is null');
+      // Double-check map doesn't exist (might have been created in the meantime)
+      if (map.current) {
+        console.log('[App] Map already exists, skipping initialization');
         return;
       }
       
-      if (map.current) {
-        console.log('[App] Map already exists, skipping initialization');
+      if (!mapContainer.current) {
+        console.warn('[App] mapContainer.current is null');
         return;
       }
       
@@ -345,8 +352,9 @@ const App: React.FC = () => {
         return;
       }
       
-      if (typeof container.style === 'undefined') {
-        console.warn('[App] Container style property is undefined');
+      // Check if container is actually a DOM element with style property
+      if (!container.style || typeof container.style === 'undefined') {
+        console.warn('[App] Container style property is undefined or not available');
         return;
       }
       
@@ -356,14 +364,10 @@ const App: React.FC = () => {
     
     return () => {
       clearTimeout(timer);
-      // Cleanup map if it exists
-      if (map.current) {
-        console.log('[App] Cleaning up map');
-        map.current.remove();
-        map.current = null;
-      }
+      // Don't cleanup map here - let it persist across re-renders
+      // Only cleanup on unmount
     };
-  }, [initializeMap]); // Include initializeMap as dependency
+  }, []); // Empty deps - only run once on mount
 
   useEffect(() => {
     if (map.current && allowedCountries.size > 0) {
