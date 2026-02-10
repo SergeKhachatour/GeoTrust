@@ -5,26 +5,23 @@ Azure Web App shows "Your web app is running and waiting for your content" becau
 
 ## Solution
 
-### Option 1: Set Startup Command in Azure Portal (Recommended)
+### Option 1: Set Startup Command in Azure Portal (REQUIRED)
+
+**Important:** The startup command MUST be set in Azure Portal. It cannot be set in GitHub Actions when using `publish-profile` authentication.
 
 1. Go to **Azure Portal** → **GeoTrust** → **Configuration** → **General settings**
 2. Find **Startup Command**
-3. Set it to one of these options:
-
-   **Option A (Recommended - direct command):**
+3. Set it to:
    ```
    npm install -g serve && serve -s . -l 8080
    ```
    
-   **Option B (Alternative - if package.json is deployed):**
-   ```
-   npm install && npm run start:prod
-   ```
-   
-   **Note:** Since only the `build` folder is deployed, use Option A. The `.` tells serve to serve the current directory (which is the build folder).
+   **Note:** The `.` tells serve to serve the current directory (which is the build folder contents).
 
 4. Click **Save**
 5. Go to **Overview** → **Restart**
+
+**Why this is required:** When using `publish-profile` authentication in GitHub Actions, the `startup-command` parameter is not supported. You must set it in Azure Portal instead.
 
 **Note:** `npm start` won't work because it runs the development server. Use `npm run start:prod` instead, which serves the built static files.
 
