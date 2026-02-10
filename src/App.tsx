@@ -403,10 +403,8 @@ const App: React.FC = () => {
   }, []);
 
   // Check admin status when wallet and contract client are ready
-  const hasCheckedAdmin = useRef(false);
   useEffect(() => {
-    if (wallet && contractClient && !hasCheckedAdmin.current) {
-      hasCheckedAdmin.current = true;
+    if (wallet && contractClient) {
       console.log('[App] Wallet and contractClient ready, checking admin status...');
       checkAdminStatus();
       fetchCountryPolicy();
