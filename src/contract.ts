@@ -252,7 +252,20 @@ export class ContractClient {
     
     // Get fresh account data right before building transaction to avoid sequence issues
     // This ensures we always have the latest sequence number
-    const sourceAccount = await this.rpc.getAccount(publicKey);
+    // Retry a few times if account fetch fails (might be temporary network issue)
+    let sourceAccount;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        sourceAccount = await this.rpc.getAccount(publicKey);
+        break;
+      } catch (error: any) {
+        retries--;
+        if (retries === 0) throw error;
+        console.warn(`[ContractClient.call] Failed to get account, retrying... (${retries} left)`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
     console.log(`[ContractClient.call] Account sequence for ${functionName}:`, sourceAccount.sequenceNumber());
     
     // Convert all arguments to ScVal

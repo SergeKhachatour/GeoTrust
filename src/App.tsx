@@ -711,43 +711,54 @@ const App: React.FC = () => {
         console.log('[App] REACT_APP_VERIFIER_ID from env:', verifierId);
         if (verifierId) {
           try {
-            console.log('[App] ≡ƒöº Setting verifier contract:', verifierId);
+            console.log('[App] Setting verifier contract:', verifierId);
             await contractClient.setVerifier(verifierId);
-            console.log('[App] Γ£à Verifier contract ID set successfully:', verifierId);
+            console.log('[App] Verifier contract ID set successfully:', verifierId);
+            // Wait a bit to ensure transaction is processed before next call
+            await new Promise(resolve => setTimeout(resolve, 2000));
           } catch (error: any) {
-            console.error('[App] Γ¥î Failed to set verifier:', error);
+            console.error('[App] Failed to set verifier:', error);
             const errorMsg = error?.message || error?.toString() || 'Unknown error';
-            // Only warn if it's already set, otherwise show error
-            if (errorMsg.includes('already') || errorMsg.includes('set')) {
-              console.warn('[App] Verifier may already be set');
+            // Don't show alert for user rejections or sequence errors
+            if (errorMsg.includes('rejected by user') || errorMsg.includes('Transaction was rejected')) {
+              console.warn('[App] Verifier setup was cancelled by user - skipping');
+            } else if (errorMsg.includes('txBadSeq') || errorMsg.includes('already') || errorMsg.includes('set')) {
+              console.warn('[App] Verifier may already be set or sequence issue - will retry later');
             } else {
-              alert(`Failed to set verifier: ${errorMsg}`);
+              console.warn('[App] Failed to set verifier (non-critical):', errorMsg);
             }
           }
         } else {
-          console.warn('[App] ΓÜá∩╕Å REACT_APP_VERIFIER_ID not set in environment');
+          console.warn('[App] REACT_APP_VERIFIER_ID not set in environment');
         }
         
         // Automatically set Game Hub contract ID if available in env
+        // Add delay to ensure sequence number is fresh after previous transaction
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         const gameHubId = process.env.REACT_APP_GAME_HUB_ID;
         console.log('[App] REACT_APP_GAME_HUB_ID from env:', gameHubId);
         if (gameHubId) {
           try {
-            console.log('[App] ≡ƒöº Setting Game Hub contract:', gameHubId);
+            console.log('[App] Setting Game Hub contract:', gameHubId);
             await contractClient.setGameHub(gameHubId);
-            console.log('[App] Γ£à Game Hub contract ID set successfully:', gameHubId);
+            console.log('[App] Game Hub contract ID set successfully:', gameHubId);
           } catch (error: any) {
-            console.error('[App] Γ¥î Failed to set Game Hub:', error);
+            console.error('[App] Failed to set Game Hub:', error);
             const errorMsg = error?.message || error?.toString() || 'Unknown error';
-            // Only warn if it's already set, otherwise show error
-            if (errorMsg.includes('already') || errorMsg.includes('set')) {
+            // Don't show alert for user rejections or sequence errors
+            if (errorMsg.includes('rejected by user') || errorMsg.includes('Transaction was rejected')) {
+              console.warn('[App] Game Hub setup was cancelled by user - skipping');
+            } else if (errorMsg.includes('txBadSeq')) {
+              console.warn('[App] Sequence number issue - Game Hub setup will need to be done manually');
+            } else if (errorMsg.includes('already') || errorMsg.includes('set')) {
               console.warn('[App] Game Hub may already be set');
             } else {
-              alert(`Failed to set Game Hub: ${errorMsg}`);
+              console.warn('[App] Failed to set Game Hub (non-critical):', errorMsg);
             }
           }
         } else {
-          console.warn('[App] ΓÜá∩╕Å REACT_APP_GAME_HUB_ID not set in environment');
+          console.warn('[App] REACT_APP_GAME_HUB_ID not set in environment');
         }
       } else {
         setIsAdmin(false);
