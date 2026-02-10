@@ -1,0 +1,17 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "NAME": "United States",
+        "ISO2": "US",
+        "ISO_NUMERIC": 840
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-125, 25], [-66, 25], [-66, 49], [-125, 49], [-125, 25]]]
+      }
+    }
+  ]
+}

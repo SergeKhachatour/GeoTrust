@@ -1,0 +1,3 @@
+country = "840"
+restricted_list = [826, 124, 36]
+restricted_list_len = "3"

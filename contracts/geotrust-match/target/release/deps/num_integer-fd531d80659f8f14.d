@@ -1,0 +1,9 @@
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\release\deps\num_integer-fd531d80659f8f14.d: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\roots.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\average.rs
+
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\release\deps\libnum_integer-fd531d80659f8f14.rlib: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\roots.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\average.rs
+
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\release\deps\libnum_integer-fd531d80659f8f14.rmeta: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\roots.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\average.rs
+
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\lib.rs:
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\roots.rs:
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-integer-0.1.46\src\average.rs:

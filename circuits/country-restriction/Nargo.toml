@@ -1,0 +1,8 @@
+[package]
+name = "country-restriction"
+type = "bin"
+authors = ["GeoTrust Match"]
+compiler_version = ">=0.20.0"
+
+[dependencies]
+std = { git = "https://github.com/noir-lang/noir", tag = "v0.20.0" }

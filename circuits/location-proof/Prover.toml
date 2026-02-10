@@ -1,0 +1,8 @@
+# Example prover configuration
+# Private inputs
+latitude = "40000000"  # 40.0 degrees (scaled by 1e6)
+longitude = "-74000000"  # -74.0 degrees (scaled by 1e6)
+
+# Public inputs
+cell_id = "123456"
+grid_size = "1000000"  # 1.0 degree (scaled by 1e6)
