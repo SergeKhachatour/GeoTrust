@@ -22,6 +22,7 @@ function getOrCreateKit(): StellarWalletsKit {
 export class Wallet {
   private connectedAddress: string | null = null;
   private kit: StellarWalletsKit;
+  private isConnecting: boolean = false;
 
   constructor() {
     // Get or create the kit instance
@@ -57,6 +58,13 @@ export class Wallet {
   }
 
   async connect(): Promise<void> {
+    // Prevent multiple simultaneous connection attempts
+    if (this.isConnecting) {
+      throw new Error('Wallet connection already in progress');
+    }
+    
+    this.isConnecting = true;
+    
     try {
       // First, get available wallets to log them for debugging
       const supportedWallets = await this.kit.getSupportedWallets();
@@ -72,47 +80,83 @@ export class Wallet {
         throw new Error('No wallets available. Please install a Stellar wallet like xBull, Albedo, or Lobstr.');
       }
       
-      // Open the modal to let user select a wallet
-      return new Promise((resolve, reject) => {
-        this.kit.openModal({
-          onWalletSelected: async (wallet) => {
-            try {
-              console.log('[Wallet] User selected wallet:', wallet.name, wallet.id);
-              
-              // Set the selected wallet
-              this.kit.setWallet(wallet.id);
-              
-              // Now get the address
-              const { address } = await this.kit.getAddress();
-              
-              if (!address) {
-                reject(new Error('No address returned from wallet'));
-                return;
+      // Check if modal is already open by checking if button was created
+      // If button exists, modal might be open, so we should wait or handle differently
+      try {
+        // Open the modal to let user select a wallet
+        return new Promise((resolve, reject) => {
+          this.kit.openModal({
+            onWalletSelected: async (wallet) => {
+              try {
+                console.log('[Wallet] User selected wallet:', wallet.name, wallet.id);
+                
+                // Set the selected wallet
+                this.kit.setWallet(wallet.id);
+                
+                // Now get the address
+                const { address } = await this.kit.getAddress();
+                
+                if (!address) {
+                  reject(new Error('No address returned from wallet'));
+                  return;
+                }
+                
+                this.saveConnectionState(true, address);
+                console.log('[Wallet] Connected to wallet:', wallet.name, address);
+                this.isConnecting = false;
+                resolve();
+              } catch (error: any) {
+                this.isConnecting = false;
+                const errorMsg = error?.message || error?.toString() || 'Unknown error';
+                console.error('[Wallet] Error connecting to wallet:', error);
+                reject(new Error(`Failed to connect to ${wallet.name}: ${errorMsg}`));
               }
-              
-              this.saveConnectionState(true, address);
-              console.log('[Wallet] Connected to wallet:', wallet.name, address);
-              resolve();
-            } catch (error: any) {
-              const errorMsg = error?.message || error?.toString() || 'Unknown error';
-              console.error('[Wallet] Error connecting to wallet:', error);
-              reject(new Error(`Failed to connect to ${wallet.name}: ${errorMsg}`));
-            }
-          },
-          onClosed: (err) => {
-            if (err) {
-              console.log('[Wallet] Modal closed with error:', err);
-              reject(new Error(`Wallet selection cancelled: ${err.message || err}`));
-            } else {
-              console.log('[Wallet] Modal closed by user');
-              reject(new Error('Wallet connection was cancelled by user'));
-            }
-          },
-          modalTitle: 'Connect Stellar Wallet',
-          notAvailableText: 'Not available on this device'
+            },
+            onClosed: (err) => {
+              this.isConnecting = false;
+              if (err) {
+                console.log('[Wallet] Modal closed with error:', err);
+                reject(new Error(`Wallet selection cancelled: ${err.message || err}`));
+              } else {
+                console.log('[Wallet] Modal closed by user');
+                reject(new Error('Wallet connection was cancelled by user'));
+              }
+            },
+            modalTitle: 'Connect Stellar Wallet',
+            notAvailableText: 'Not available on this device'
+          });
         });
-      });
+      } catch (error: any) {
+        this.isConnecting = false;
+        const errorMsg = error?.message || error?.toString() || 'Unknown error';
+        
+        // If modal is already open, wait a bit and try to get address instead
+        if (errorMsg.includes('already open') || errorMsg.includes('modal is already')) {
+          console.log('[Wallet] Modal already open, trying to get address directly...');
+          // Wait a moment for the existing modal to complete
+          await new Promise(resolve => setTimeout(resolve, 500));
+          // Try to get address - if wallet is already selected, this should work
+          try {
+            const { address } = await this.kit.getAddress();
+            if (address) {
+              this.saveConnectionState(true, address);
+              return;
+            }
+          } catch (e) {
+            // If that fails, rethrow the original error
+            throw error;
+          }
+        }
+        
+        // Check if user rejected/cancelled
+        if (errorMsg.includes('rejected') || errorMsg.includes('cancelled') || errorMsg.includes('denied') || errorMsg.includes('closed')) {
+          throw new Error('Wallet connection was cancelled by user');
+        }
+        
+        throw new Error(`Failed to connect wallet: ${errorMsg}`);
+      }
     } catch (error: any) {
+      this.isConnecting = false;
       this.saveConnectionState(false);
       const errorMsg = error?.message || error?.toString() || 'Unknown error';
       
@@ -121,7 +165,7 @@ export class Wallet {
         throw new Error('Wallet connection was cancelled by user');
       }
       
-      throw new Error(`Failed to connect wallet: ${errorMsg}`);
+      throw error;
     }
   }
 
