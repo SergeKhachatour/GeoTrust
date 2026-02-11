@@ -346,7 +346,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('[App] Failed to initialize map:', error);
     }
-  }, [loadCountryOverlay]); // Include loadCountryOverlay as dependency
+  }, [loadCountryOverlay, updateCountryOverlay]); // Include loadCountryOverlay and updateCountryOverlay as dependencies
 
   useEffect(() => {
     // Only initialize map once - if map already exists, don't re-initialize
@@ -481,29 +481,8 @@ const App: React.FC = () => {
         
         console.log('[App] Country policy loaded:', { defaultAllowAll, allowedCount, deniedCount, allowedList });
         
-        // If map is already loaded with countries source, update the overlay immediately
-        // Use a function to check and update
-        const updateIfReady = () => {
-          if (map.current && map.current.loaded()) {
-            const source = map.current.getSource('countries');
-            if (source) {
-              console.log('[App] Map is ready, updating country overlay with loaded policy');
-              updateCountryOverlay();
-              return true;
-            }
-          }
-          return false;
-        };
-        
-        // Try immediately, then retry after a short delay if not ready
-        if (!updateIfReady()) {
-          setTimeout(() => {
-            if (!updateIfReady()) {
-              // Try one more time after map has more time to load
-              setTimeout(updateIfReady, 500);
-            }
-          }, 200);
-        }
+        // The overlay will be updated automatically by the useEffect that watches allowedCountries/defaultAllowAll
+        // No need to manually call updateCountryOverlay here - it will be triggered by state changes
         
         // Fetch active sessions (will be called after readOnlyClient is set)
       } catch (error) {
@@ -512,7 +491,8 @@ const App: React.FC = () => {
     };
     
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount. updateCountryOverlay will be called by the useEffect that watches state changes
 
   // Fetch active sessions when readOnlyClient is ready
   useEffect(() => {
