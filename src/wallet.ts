@@ -182,7 +182,7 @@ export class Wallet {
     }
   }
 
-  async getPublicKey(): Promise<string> {
+  async getPublicKey(skipConnect: boolean = false): Promise<string> {
     // If we have a cached address and were connected, try to use it
     // But still verify with the kit
     if (this.connectedAddress && Wallet.wasConnected()) {
@@ -194,14 +194,17 @@ export class Wallet {
           return address;
         }
       } catch (error) {
-        // If that fails, fall through to full connection flow
+        // If that fails and we're not skipping connect, fall through to full connection flow
+        if (!skipConnect) {
+          throw new Error('Failed to get cached address');
+        }
         console.warn('[Wallet] Failed to get cached address, requesting new connection');
       }
     }
     
     // Try to get address - if it fails with "set wallet first", we need to connect
     try {
-      const { address } = await this.kit.getAddress();
+      const { address } = await this.kit.getAddress({ skipRequestAccess: skipConnect });
       if (address) {
         this.connectedAddress = address;
         this.saveConnectionState(true, address);
@@ -210,6 +213,11 @@ export class Wallet {
       throw new Error('No address returned from wallet');
     } catch (error: any) {
       const errorMsg = error?.message || error?.toString() || 'Unknown error';
+      
+      // If skipConnect is true, don't try to connect - just throw the error
+      if (skipConnect) {
+        throw new Error(`Failed to get public key from wallet: ${errorMsg}`);
+      }
       
       // If it's a "set wallet first" error, trigger connection
       if (errorMsg.includes('set the wallet first') || errorMsg.includes('Please set the wallet')) {
@@ -231,7 +239,8 @@ export class Wallet {
 
   async signTransaction(xdr: string, networkPassphrase?: string): Promise<string> {
     try {
-      const address = await this.getPublicKey();
+      // For signing, we need a connected wallet, so don't skip connect
+      const address = await this.getPublicKey(false);
       
       // Use the kit's signTransaction method
       const { signedTxXdr } = await this.kit.signTransaction(xdr, {

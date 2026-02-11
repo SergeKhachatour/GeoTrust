@@ -514,23 +514,21 @@ const App: React.FC = () => {
       if (Wallet.wasConnected() && !wallet) {
         try {
           const w = new Wallet();
-          // Try to get public key first - this will only open modal if wallet isn't set
+          // Try to get public key silently (skipConnect=true) - this won't open modal
           // If wallet was previously connected, getPublicKey should work without opening modal
-          const address = await w.getPublicKey();
+          const address = await w.getPublicKey(true); // Pass true to skip connect
           setWallet(w);
           setWalletAddress(address);
           const client = new ContractClient(w);
           setContractClient(client);
+          console.log('[App] Wallet restored successfully:', address);
           // Admin check will happen automatically via useEffect when wallet and client are set
         } catch (error: any) {
           console.log('Failed to restore wallet connection:', error);
-          // Only clear connection state if it's a real error (not user cancellation)
-          const errorMsg = error?.message || error?.toString() || '';
-          if (!errorMsg.includes('cancelled') && !errorMsg.includes('rejected')) {
-            // Clear invalid connection state
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('geotrust_wallet_connected');
-            }
+          // Clear invalid connection state - restoration failed, so connection is invalid
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('geotrust_wallet_connected');
+            localStorage.removeItem('geotrust_wallet_address');
           }
         }
       }
