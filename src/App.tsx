@@ -443,7 +443,7 @@ const App: React.FC = () => {
       }, 500);
     } catch (error: any) {
       console.error('Failed to connect wallet:', error);
-      setWalletError(error.message || 'Failed to connect wallet. Please install Freighter extension.');
+      setWalletError(error.message || 'Failed to connect wallet. Please try again or select a different wallet.');
     }
   };
 
@@ -1043,8 +1043,8 @@ const App: React.FC = () => {
                 <h3>Wallet Connection Required</h3>
                 <p>{walletError}</p>
                 <p>
-                  <a href="https://freighter.app/" target="_blank" rel="noopener noreferrer">
-                    Install Freighter Extension ΓåÆ
+                  <a href="https://stellarwalletskit.dev/" target="_blank" rel="noopener noreferrer">
+                    Learn about supported wallets →
                   </a>
                 </p>
                 <button className="primary-button" onClick={() => { setWalletError(null); connectWallet(); }} style={{ marginTop: '12px' }}>
@@ -1065,7 +1065,7 @@ const App: React.FC = () => {
                 </button>
                 {navigator.userAgent.match(/Mobile|Android|iPhone|iPad/) && (
                   <p style={{ fontSize: '12px', color: '#666', textAlign: 'center', margin: 0 }}>
-                    Note: Freighter wallet is available as a browser extension. For mobile, use a browser that supports extensions.
+                    Mobile wallets supported: xBull (PWA), Albedo, WalletConnect, Lobstr, and more!
                   </p>
                 )}
               </div>

@@ -1,18 +1,39 @@
-import { 
-  isConnected, 
-  setAllowed, 
-  getPublicKey, 
-  signTransaction as freighterSignTransaction 
-} from '@stellar/freighter-api';
+import { StellarWalletsKit, WalletNetwork, allowAllModules } from "@creit.tech/stellar-wallets-kit";
+import { Networks } from '@stellar/stellar-sdk';
 
 const WALLET_STORAGE_KEY = 'geotrust_wallet_connected';
+const WALLET_ADDRESS_KEY = 'geotrust_wallet_address';
+
+// Global kit instance
+let kitInstance: StellarWalletsKit | null = null;
+
+function getOrCreateKit(): StellarWalletsKit {
+  if (!kitInstance) {
+    // Initialize the kit with all available modules
+    kitInstance = new StellarWalletsKit({
+      network: WalletNetwork.TESTNET, // Use TESTNET for Stellar Testnet
+      modules: allowAllModules(),
+    });
+    console.log('[Wallet] Stellar Wallets Kit initialized');
+  }
+  return kitInstance;
+}
 
 export class Wallet {
-  private freighterAvailable: boolean = false;
+  private connectedAddress: string | null = null;
+  private kit: StellarWalletsKit;
 
   constructor() {
-    // Check if Freighter is available
-    this.checkFreighterAvailable();
+    // Get or create the kit instance
+    this.kit = getOrCreateKit();
+    
+    // Try to restore previous connection
+    if (typeof window !== 'undefined') {
+      const savedAddress = localStorage.getItem(WALLET_ADDRESS_KEY);
+      if (savedAddress && Wallet.wasConnected()) {
+        this.connectedAddress = savedAddress;
+      }
+    }
   }
 
   // Check if wallet was previously connected
@@ -22,89 +43,86 @@ export class Wallet {
   }
 
   // Save connection state
-  private saveConnectionState(connected: boolean): void {
+  private saveConnectionState(connected: boolean, address?: string): void {
     if (typeof window === 'undefined') return;
-    if (connected) {
+    if (connected && address) {
       localStorage.setItem(WALLET_STORAGE_KEY, 'true');
+      localStorage.setItem(WALLET_ADDRESS_KEY, address);
+      this.connectedAddress = address;
     } else {
       localStorage.removeItem(WALLET_STORAGE_KEY);
+      localStorage.removeItem(WALLET_ADDRESS_KEY);
+      this.connectedAddress = null;
     }
-  }
-
-  private checkFreighterAvailable(): void {
-    if (typeof window !== 'undefined') {
-      // Check if Freighter API is available via window object
-      this.freighterAvailable = typeof (window as any).freighterApi !== 'undefined';
-    }
-  }
-
-  private async waitForFreighter(maxAttempts: number = 20): Promise<boolean> {
-    for (let i = 0; i < maxAttempts; i++) {
-      this.checkFreighterAvailable();
-      if (this.freighterAvailable) {
-        return true;
-      }
-      // Also check if the functions are available (they might be injected differently)
-      try {
-        // Try to call isConnected - if it works, Freighter is available
-        await isConnected();
-        this.freighterAvailable = true;
-        return true;
-      } catch (e) {
-        // Not available yet, wait and retry
-      }
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    return false;
   }
 
   async connect(): Promise<void> {
-    // Wait for Freighter to be available (it might load asynchronously)
-    const isAvailable = await this.waitForFreighter();
-    
-    if (!isAvailable) {
-      throw new Error('Freighter wallet not found. Please install Freighter extension from https://freighter.app and refresh the page.');
-    }
-
     try {
-      // Check if Freighter is connected
-      const connected = await isConnected();
-      if (!connected) {
-        // Request permission to connect
-        await setAllowed();
+      // Use the kit's getAddress which will show the wallet selection modal
+      const { address } = await this.kit.getAddress();
+      
+      if (!address) {
+        throw new Error('No address returned from wallet');
       }
-      this.saveConnectionState(true);
+      
+      this.saveConnectionState(true, address);
+      console.log('[Wallet] Connected to wallet:', address);
     } catch (error: any) {
-      // If setAllowed fails, try to get public key directly (this will prompt if needed)
-      try {
-        await getPublicKey();
-        this.saveConnectionState(true);
-      } catch (e: any) {
-        this.saveConnectionState(false);
-        const errorMsg = e?.message || e?.toString() || 'Unknown error';
-        throw new Error(`Failed to connect to Freighter: ${errorMsg}. Please make sure Freighter is unlocked and try again.`);
+      this.saveConnectionState(false);
+      const errorMsg = error?.message || error?.toString() || 'Unknown error';
+      
+      // Check if user rejected/cancelled
+      if (errorMsg.includes('rejected') || errorMsg.includes('cancelled') || errorMsg.includes('denied') || errorMsg.includes('closed')) {
+        throw new Error('Wallet connection was cancelled by user');
       }
+      
+      throw new Error(`Failed to connect wallet: ${errorMsg}`);
     }
   }
 
   async disconnect(): Promise<void> {
-    this.saveConnectionState(false);
+    try {
+      // Disconnect from the kit
+      await this.kit.disconnect();
+      this.saveConnectionState(false);
+      console.log('[Wallet] Disconnected');
+    } catch (error) {
+      console.error('[Wallet] Error during disconnect:', error);
+      // Still clear our state even if there's an error
+      this.saveConnectionState(false);
+    }
   }
 
   async getPublicKey(): Promise<string> {
-    if (!this.freighterAvailable) {
-      const isAvailable = await this.waitForFreighter();
-      if (!isAvailable) {
-        throw new Error('Wallet not connected');
+    // If we have a cached address and were connected, try to use it
+    // But still verify with the kit
+    if (this.connectedAddress && Wallet.wasConnected()) {
+      try {
+        // Try to get address from kit (this will use the selected wallet)
+        const { address } = await this.kit.getAddress({ skipRequestAccess: true });
+        if (address) {
+          this.connectedAddress = address;
+          return address;
+        }
+      } catch (error) {
+        // If that fails, fall through to full connection flow
+        console.warn('[Wallet] Failed to get cached address, requesting new connection');
       }
     }
     
     try {
-      const publicKey = await getPublicKey();
-      if (!publicKey) {
-        throw new Error('No public key returned from Freighter');
+      // Otherwise, get it from the kit (this will show the modal if not connected)
+      const { address } = await this.kit.getAddress();
+      
+      if (!address) {
+        throw new Error('No address returned from wallet');
       }
-      return publicKey;
+      
+      // Cache it
+      this.connectedAddress = address;
+      this.saveConnectionState(true, address);
+      
+      return address;
     } catch (error: any) {
       const errorMsg = error?.message || error?.toString() || 'Unknown error';
       throw new Error(`Failed to get public key from wallet: ${errorMsg}`);
@@ -112,30 +130,28 @@ export class Wallet {
   }
 
   async signTransaction(xdr: string, networkPassphrase?: string): Promise<string> {
-    if (!this.freighterAvailable) {
-      const isAvailable = await this.waitForFreighter();
-      if (!isAvailable) {
-        throw new Error('Wallet not connected');
-      }
-    }
-    
     try {
-      const publicKey = await this.getPublicKey();
+      const address = await this.getPublicKey();
       
-      // Use networkPassphrase if provided, otherwise use network name
-      const opts: any = {
-        accountToSign: publicKey,
-      };
+      // Use the kit's signTransaction method
+      const { signedTxXdr } = await this.kit.signTransaction(xdr, {
+        networkPassphrase: networkPassphrase || Networks.TESTNET,
+        address,
+      });
       
-      if (networkPassphrase) {
-        opts.networkPassphrase = networkPassphrase;
-      } else {
-        opts.network = 'testnet';
+      if (!signedTxXdr) {
+        throw new Error('No signed transaction returned from wallet');
       }
       
-      return await freighterSignTransaction(xdr, opts);
+      return signedTxXdr;
     } catch (error: any) {
       const errorMsg = error?.message || error?.toString() || 'Unknown error';
+      
+      // Check if user rejected
+      if (errorMsg.includes('rejected') || errorMsg.includes('cancelled') || errorMsg.includes('denied')) {
+        throw new Error('Transaction was rejected by user');
+      }
+      
       throw new Error(`Failed to sign transaction: ${errorMsg}`);
     }
   }
