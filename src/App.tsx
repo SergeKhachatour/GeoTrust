@@ -1042,7 +1042,21 @@ const App: React.FC = () => {
               <div className="wallet-error">
                 <h3>Wallet Connection Required</h3>
                 <p>{walletError}</p>
-                <p>
+                {walletError.includes('No wallets available') && (
+                  <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#fff3cd', borderRadius: '4px', fontSize: '13px' }}>
+                    <strong>Mobile Users:</strong> Install a mobile wallet:
+                    <ul style={{ margin: '8px 0 0 20px', padding: 0 }}>
+                      <li><strong>xBull</strong> - Install as PWA from <a href="https://xbull.app" target="_blank" rel="noopener noreferrer">xbull.app</a></li>
+                      <li><strong>Albedo</strong> - Works in browser, no install needed</li>
+                      <li><strong>Lobstr</strong> - Mobile app available</li>
+                      <li><strong>WalletConnect</strong> - Connect to mobile wallets</li>
+                    </ul>
+                    <p style={{ margin: '8px 0 0 0', fontSize: '12px' }}>
+                      <strong>Note:</strong> Freighter is a browser extension and only works on desktop.
+                    </p>
+                  </div>
+                )}
+                <p style={{ marginTop: '12px', fontSize: '12px' }}>
                   <a href="https://stellarwalletskit.dev/" target="_blank" rel="noopener noreferrer">
                     Learn about supported wallets →
                   </a>
@@ -1064,9 +1078,11 @@ const App: React.FC = () => {
                   )}
                 </button>
                 {navigator.userAgent.match(/Mobile|Android|iPhone|iPad/) && (
-                  <p style={{ fontSize: '12px', color: '#666', textAlign: 'center', margin: 0 }}>
-                    Mobile wallets supported: xBull (PWA), Albedo, WalletConnect, Lobstr, and more!
-                  </p>
+                  <div style={{ fontSize: '12px', color: '#666', textAlign: 'center', margin: 0, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                    <strong>Mobile wallets:</strong> xBull (PWA), Albedo, WalletConnect, Lobstr
+                    <br />
+                    <span style={{ fontSize: '11px', color: '#999' }}>Freighter is desktop-only</span>
+                  </div>
                 )}
               </div>
             ) : (

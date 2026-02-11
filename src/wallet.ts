@@ -58,11 +58,27 @@ export class Wallet {
 
   async connect(): Promise<void> {
     try {
-      // First, open the modal to let user select a wallet
+      // First, get available wallets to log them for debugging
+      const supportedWallets = await this.kit.getSupportedWallets();
+      console.log('[Wallet] Available wallets:', supportedWallets.map(w => ({
+        name: w.name,
+        id: w.id,
+        isAvailable: w.isAvailable,
+        type: w.type
+      })));
+      
+      const availableWallets = supportedWallets.filter(w => w.isAvailable);
+      if (availableWallets.length === 0) {
+        throw new Error('No wallets available. Please install a Stellar wallet like xBull, Albedo, or Lobstr.');
+      }
+      
+      // Open the modal to let user select a wallet
       return new Promise((resolve, reject) => {
         this.kit.openModal({
           onWalletSelected: async (wallet) => {
             try {
+              console.log('[Wallet] User selected wallet:', wallet.name, wallet.id);
+              
               // Set the selected wallet
               this.kit.setWallet(wallet.id);
               
@@ -79,16 +95,21 @@ export class Wallet {
               resolve();
             } catch (error: any) {
               const errorMsg = error?.message || error?.toString() || 'Unknown error';
+              console.error('[Wallet] Error connecting to wallet:', error);
               reject(new Error(`Failed to connect to ${wallet.name}: ${errorMsg}`));
             }
           },
           onClosed: (err) => {
             if (err) {
+              console.log('[Wallet] Modal closed with error:', err);
               reject(new Error(`Wallet selection cancelled: ${err.message || err}`));
             } else {
+              console.log('[Wallet] Modal closed by user');
               reject(new Error('Wallet connection was cancelled by user'));
             }
           },
+          modalTitle: 'Connect Stellar Wallet',
+          notAvailableText: 'Not available on this device'
         });
       });
     } catch (error: any) {
