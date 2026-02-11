@@ -303,7 +303,14 @@ const App: React.FC = () => {
       const handleMapLoad = () => {
         console.log('[App] Map loaded successfully');
         if (map.current) {
-          loadCountryOverlay();
+          loadCountryOverlay().then(() => {
+            // After overlay is loaded, update it with current country policy
+            // This ensures countries show correctly even if policy was loaded before map
+            console.log('[App] Country overlay loaded, updating with policy');
+            setTimeout(() => {
+              updateCountryOverlay();
+            }, 200);
+          });
           // Admin check will happen automatically via useEffect when wallet and client are ready
         }
       };
@@ -373,9 +380,19 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - only run once on mount (initializeMap changes when country policy changes, but we don't want to re-initialize the map)
 
+  // Update country overlay when country policy or map changes
   useEffect(() => {
-    if (map.current && allowedCountries.size > 0) {
-      updateCountryOverlay();
+    if (map.current && map.current.loaded()) {
+      // Check if countries source exists
+      const source = map.current.getSource('countries');
+      if (source) {
+        // Map is ready and countries source exists, update overlay
+        console.log('[App] Updating country overlay with current policy');
+        updateCountryOverlay();
+      } else {
+        // Countries source doesn't exist yet, wait a bit and try again
+        console.log('[App] Countries source not ready yet, will update when loaded');
+      }
     }
   }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
 
@@ -428,6 +445,30 @@ const App: React.FC = () => {
         setAllowedCountries(new Set(allowedList));
         
         console.log('[App] Country policy loaded:', { defaultAllowAll, allowedCount, deniedCount, allowedList });
+        
+        // If map is already loaded with countries source, update the overlay immediately
+        // Use a function to check and update
+        const updateIfReady = () => {
+          if (map.current && map.current.loaded()) {
+            const source = map.current.getSource('countries');
+            if (source) {
+              console.log('[App] Map is ready, updating country overlay with loaded policy');
+              updateCountryOverlay();
+              return true;
+            }
+          }
+          return false;
+        };
+        
+        // Try immediately, then retry after a short delay if not ready
+        if (!updateIfReady()) {
+          setTimeout(() => {
+            if (!updateIfReady()) {
+              // Try one more time after map has more time to load
+              setTimeout(updateIfReady, 500);
+            }
+          }, 200);
+        }
         
         // Fetch active sessions (will be called after readOnlyClient is set)
       } catch (error) {
