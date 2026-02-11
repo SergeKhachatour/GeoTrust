@@ -4,6 +4,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import './App.css';
 import { Wallet } from './wallet';
 import { ContractClient } from './contract';
+import { ReadOnlyContractClient } from './contract-readonly';
 import { AdminPanel } from './AdminPanel';
 import { GamePanel } from './GamePanel';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
@@ -37,6 +38,8 @@ const App: React.FC = () => {
   const [otherUsers, setOtherUsers] = useState<Array<{ id: string; location: [number, number]; distance: number }>>([]);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const hasCheckedInRef = useRef(false);
+  const [readOnlyClient, setReadOnlyClient] = useState<ReadOnlyContractClient | null>(null);
+  const [activeSessions, setActiveSessions] = useState<Array<{ sessionId: number; player1: string | null; player2: string | null; state: string }>>([]);
 
   // Define updateCountryOverlay first (used by loadCountryOverlay)
   const updateCountryOverlay = useCallback(() => {
@@ -375,6 +378,79 @@ const App: React.FC = () => {
       updateCountryOverlay();
     }
   }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
+
+  // Fetch active sessions (poll recent session IDs)
+  const fetchActiveSessions = useCallback(async () => {
+    if (!readOnlyClient) return;
+
+    try {
+      const sessions: Array<{ sessionId: number; player1: string | null; player2: string | null; state: string }> = [];
+      
+      // Poll sessions 1-50 to find active ones
+      // In production, you'd want a better way to track sessions
+      for (let sessionId = 1; sessionId <= 50; sessionId++) {
+        try {
+          const session = await readOnlyClient.getSession(sessionId);
+          if (session && (session.state === 'Waiting' || session.state === 'Active')) {
+            sessions.push({
+              sessionId,
+              player1: session.player1 || null,
+              player2: session.player2 || null,
+              state: session.state || 'Unknown'
+            });
+          }
+        } catch (error) {
+          // Session doesn't exist or error - skip it
+          continue;
+        }
+      }
+      
+      setActiveSessions(sessions);
+      console.log('[App] Active sessions:', sessions);
+    } catch (error) {
+      console.error('[App] Failed to fetch active sessions:', error);
+    }
+  }, [readOnlyClient]);
+
+  // Initialize read-only client on mount (for fetching public data without wallet)
+  useEffect(() => {
+    const client = new ReadOnlyContractClient();
+    setReadOnlyClient(client);
+    
+    // Fetch country policy immediately (doesn't require wallet)
+    const loadData = async () => {
+      try {
+        const [defaultAllowAll, allowedCount, deniedCount] = await client.getCountryPolicy();
+        setDefaultAllowAll(defaultAllowAll);
+        
+        // Fetch allowed countries list
+        const allowedList = await client.listAllowedCountries(0, 1000);
+        setAllowedCountries(new Set(allowedList));
+        
+        console.log('[App] Country policy loaded:', { defaultAllowAll, allowedCount, deniedCount, allowedList });
+        
+        // Fetch active sessions (will be called after readOnlyClient is set)
+      } catch (error) {
+        console.error('[App] Failed to load data:', error);
+      }
+    };
+    
+    loadData();
+  }, []);
+
+  // Fetch active sessions when readOnlyClient is ready
+  useEffect(() => {
+    if (readOnlyClient) {
+      fetchActiveSessions();
+      
+      // Poll for active sessions every 10 seconds
+      const sessionInterval = setInterval(() => {
+        fetchActiveSessions();
+      }, 10000);
+      
+      return () => clearInterval(sessionInterval);
+    }
+  }, [readOnlyClient, fetchActiveSessions]);
 
   // Restore wallet connection on page load
   useEffect(() => {
@@ -793,10 +869,12 @@ const App: React.FC = () => {
   };
 
   const fetchCountryPolicy = async () => {
-    if (!contractClient) return;
+    // Use read-only client if available, otherwise use contractClient
+    const client = readOnlyClient || contractClient;
+    if (!client) return;
 
     try {
-      const [defaultAllow, allowedCount] = await contractClient.getCountryPolicy();
+      const [defaultAllow, allowedCount] = await (client as any).getCountryPolicy();
       setDefaultAllowAll(defaultAllow);
 
       // Fetch allowed countries with pagination
@@ -805,13 +883,81 @@ const App: React.FC = () => {
       const allAllowed = new Set<number>();
 
       for (let page = 0; page < pages; page++) {
-        const countries = await contractClient.listAllowedCountries(page, pageSize);
+        const countries = await (client as any).listAllowedCountries(page, pageSize);
         countries.forEach((code: number) => allAllowed.add(code));
       }
 
       setAllowedCountries(allAllowed);
     } catch (error) {
       console.error('Failed to fetch country policy:', error);
+    }
+  };
+
+  // Handle joining a session
+  const handleJoinSession = async (sessionId: number) => {
+    if (!wallet || !contractClient) {
+      alert('Please connect your wallet first to join a session');
+      await connectWallet();
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser');
+      return;
+    }
+
+    try {
+      setIsCheckingIn(true);
+      
+      // Get user's location
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          setPlayerLocation([longitude, latitude]);
+
+          // Get country code
+          const countryCode = await getCountryCode(longitude, latitude);
+          if (!countryCode) {
+            alert('Failed to determine country');
+            setIsCheckingIn(false);
+            return;
+          }
+
+          try {
+            const cellId = calculateCellId(latitude, longitude);
+            const assetTag = await getAssetTag();
+            
+            // Join the session
+            await contractClient.joinSession(
+              sessionId,
+              cellId,
+              assetTag,
+              countryCode,
+              undefined // No proof for now
+            );
+
+            setSessionLink(`${window.location.origin}?session=${sessionId}`);
+            alert(`Successfully joined session ${sessionId}!`);
+            
+            // Refresh active sessions
+            await fetchActiveSessions();
+          } catch (error: any) {
+            console.error('Failed to join session:', error);
+            alert(`Failed to join session: ${error.message || error}`);
+          } finally {
+            setIsCheckingIn(false);
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          alert('Failed to get your location. Please allow location access.');
+          setIsCheckingIn(false);
+        }
+      );
+    } catch (error: any) {
+      console.error('Error joining session:', error);
+      alert(`Error: ${error.message || error}`);
+      setIsCheckingIn(false);
     }
   };
 
@@ -1071,7 +1217,7 @@ const App: React.FC = () => {
                 </button>
               </div>
             ) : !wallet ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <button className="primary-button" onClick={connectWallet} style={{ width: '100%' }}>
                   {isCheckingIn ? (
                     <>
@@ -1087,6 +1233,33 @@ const App: React.FC = () => {
                     <strong>Mobile wallets:</strong> xBull (PWA), Albedo, WalletConnect, Lobstr
                     <br />
                     <span style={{ fontSize: '11px', color: '#999' }}>Freighter is desktop-only</span>
+                  </div>
+                )}
+                
+                {/* Show active sessions even without wallet */}
+                {activeSessions.length > 0 && (
+                  <div className="game-panel" style={{ marginTop: '8px' }}>
+                    <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>Active Sessions</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                      {activeSessions.map(session => (
+                        <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
+                          <div><strong>Session #{session.sessionId}</strong></div>
+                          <div>Player 1: {session.player1 ? `${session.player1.slice(0, 6)}...${session.player1.slice(-4)}` : 'Waiting...'}</div>
+                          <div>Player 2: {session.player2 ? `${session.player2.slice(0, 6)}...${session.player2.slice(-4)}` : 'Waiting...'}</div>
+                          <div>State: {session.state}</div>
+                          {session.state === 'Waiting' && (
+                            <button 
+                              className="primary-button" 
+                              onClick={() => handleJoinSession(session.sessionId)}
+                              style={{ marginTop: '8px', padding: '6px 12px', fontSize: '11px' }}
+                              disabled={!wallet}
+                            >
+                              {wallet ? 'Join Session' : 'Connect Wallet to Join'}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

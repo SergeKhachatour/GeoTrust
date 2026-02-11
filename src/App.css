@@ -28,6 +28,22 @@
   transition: all 0.3s ease;
 }
 
+/* On mobile, move overlay up to ensure Connect Wallet button is visible */
+@media (max-width: 768px) {
+  .overlay {
+    bottom: auto;
+    top: 20px;
+    left: 10px;
+    right: 10px;
+    max-width: none;
+    width: calc(100% - 20px);
+  }
+  
+  .overlay.no-wallet {
+    top: 10px;
+  }
+}
+
 .overlay.minimized {
   max-height: 60px;
   overflow: hidden;
