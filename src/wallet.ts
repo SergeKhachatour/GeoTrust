@@ -58,15 +58,39 @@ export class Wallet {
 
   async connect(): Promise<void> {
     try {
-      // Use the kit's getAddress which will show the wallet selection modal
-      const { address } = await this.kit.getAddress();
-      
-      if (!address) {
-        throw new Error('No address returned from wallet');
-      }
-      
-      this.saveConnectionState(true, address);
-      console.log('[Wallet] Connected to wallet:', address);
+      // First, open the modal to let user select a wallet
+      return new Promise((resolve, reject) => {
+        this.kit.openModal({
+          onWalletSelected: async (wallet) => {
+            try {
+              // Set the selected wallet
+              this.kit.setWallet(wallet.id);
+              
+              // Now get the address
+              const { address } = await this.kit.getAddress();
+              
+              if (!address) {
+                reject(new Error('No address returned from wallet'));
+                return;
+              }
+              
+              this.saveConnectionState(true, address);
+              console.log('[Wallet] Connected to wallet:', wallet.name, address);
+              resolve();
+            } catch (error: any) {
+              const errorMsg = error?.message || error?.toString() || 'Unknown error';
+              reject(new Error(`Failed to connect to ${wallet.name}: ${errorMsg}`));
+            }
+          },
+          onClosed: (err) => {
+            if (err) {
+              reject(new Error(`Wallet selection cancelled: ${err.message || err}`));
+            } else {
+              reject(new Error('Wallet connection was cancelled by user'));
+            }
+          },
+        });
+      });
     } catch (error: any) {
       this.saveConnectionState(false);
       const errorMsg = error?.message || error?.toString() || 'Unknown error';
@@ -110,21 +134,32 @@ export class Wallet {
       }
     }
     
+    // Try to get address - if it fails with "set wallet first", we need to connect
     try {
-      // Otherwise, get it from the kit (this will show the modal if not connected)
       const { address } = await this.kit.getAddress();
-      
-      if (!address) {
-        throw new Error('No address returned from wallet');
+      if (address) {
+        this.connectedAddress = address;
+        this.saveConnectionState(true, address);
+        return address;
       }
-      
-      // Cache it
-      this.connectedAddress = address;
-      this.saveConnectionState(true, address);
-      
-      return address;
+      throw new Error('No address returned from wallet');
     } catch (error: any) {
       const errorMsg = error?.message || error?.toString() || 'Unknown error';
+      
+      // If it's a "set wallet first" error, trigger connection
+      if (errorMsg.includes('set the wallet first') || errorMsg.includes('Please set the wallet')) {
+        // Try to connect (this will open the modal)
+        await this.connect();
+        // After connect, getAddress should work
+        const { address } = await this.kit.getAddress();
+        if (address) {
+          this.connectedAddress = address;
+          this.saveConnectionState(true, address);
+          return address;
+        }
+        throw new Error('No address returned from wallet after connection');
+      }
+      
       throw new Error(`Failed to get public key from wallet: ${errorMsg}`);
     }
   }
