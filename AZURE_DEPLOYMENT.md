@@ -88,8 +88,10 @@ Azure needs to know how to build your React app. Create a startup command:
 1. Go to **Configuration** → **General settings**
 2. Set **Startup Command**:
    ```bash
-   npm install -g serve && serve -s build -l 8080
+   node server.js
    ```
+   
+   **Note:** This uses a lightweight Node.js server script that's automatically included in the build folder. It starts much faster than installing packages.
 
 Or use Azure's built-in Node.js build:
 

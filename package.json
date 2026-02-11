@@ -15,12 +15,12 @@
   },
   "scripts": {
     "start": "set PORT=3366 && react-scripts start",
-    "build": "react-scripts build",
+    "build": "react-scripts build && node scripts/create-server.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "serve": "serve -s build -l 8080",
-    "azure-start": "npm install -g serve && serve -s build -l 8080",
-    "start:prod": "serve -s build -l ${PORT:-8080}"
+    "azure-start": "node build/server.js",
+    "start:prod": "node build/server.js"
   },
   "eslintConfig": {
     "extends": [

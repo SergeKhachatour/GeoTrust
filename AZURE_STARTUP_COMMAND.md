@@ -13,10 +13,10 @@ Azure Web App shows "Your web app is running and waiting for your content" becau
 2. Find **Startup Command**
 3. Set it to:
    ```
-   npm install -g serve && serve -s . -l 8080
+   node server.js
    ```
    
-   **Note:** The `.` tells serve to serve the current directory (which is the build folder contents).
+   **Note:** This uses a lightweight Node.js server script that's included in the build folder. It doesn't require installing any packages, so it starts much faster.
 
 4. Click **Save**
 5. Go to **Overview** → **Restart**

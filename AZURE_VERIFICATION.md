@@ -30,11 +30,11 @@
 ### Common Issues
 
 **Issue: "Cannot find module 'serve'" or "Could not read package.json"**
-- **Fix:** Since only the `build` folder is deployed, use this startup command:
+- **Fix:** The new startup command uses a built-in Node.js server. Set the startup command to:
   ```
-  npm install -g serve && serve -s . -l 8080
+  node server.js
   ```
-  The `.` tells serve to serve the current directory (which is the build folder).
+  This server script is automatically included in the build folder and doesn't require any package installation.
 
 **Issue: "Cannot find module 'build'"**
 - **Fix:** The build folder wasn't deployed. Check GitHub Actions deployment logs.
