@@ -39,7 +39,15 @@ const App: React.FC = () => {
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const hasCheckedInRef = useRef(false);
   const [readOnlyClient, setReadOnlyClient] = useState<ReadOnlyContractClient | null>(null);
-  const [activeSessions, setActiveSessions] = useState<Array<{ sessionId: number; player1: string | null; player2: string | null; state: string }>>([]);
+  const [activeSessions, setActiveSessions] = useState<Array<{ 
+    sessionId: number; 
+    player1: string | null; 
+    player2: string | null; 
+    state: string;
+    p1CellId?: number;
+    p2CellId?: number;
+  }>>([]);
+  const [userCurrentSession, setUserCurrentSession] = useState<number | null>(null);
 
   // Define updateCountryOverlay first (used by loadCountryOverlay)
   const updateCountryOverlay = useCallback(() => {
@@ -431,12 +439,90 @@ const App: React.FC = () => {
     }
   }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
 
+  // Show markers from active sessions to entice users
+  const updateSessionMarkers = useCallback((sessions: Array<{ 
+    sessionId: number; 
+    player1: string | null; 
+    player2: string | null; 
+    state: string;
+    p1CellId?: number;
+    p2CellId?: number;
+  }>) => {
+    if (!map.current) return;
+    
+    // Remove existing session markers
+    document.querySelectorAll('.session-user-marker').forEach(m => m.remove());
+    
+    // Add markers for players in active sessions
+    // For demo purposes, we'll place markers at approximate locations based on cell_id
+    // In production, you'd store actual lat/lon or fetch from a location service
+    sessions.forEach(session => {
+      if (session.player1 && session.p1CellId) {
+        // Convert cell_id to approximate lat/lon (simplified - in production use actual location)
+        const lat = (session.p1CellId % 360) * 0.5 - 90;
+        const lng = Math.floor(session.p1CellId / 360) * 0.5 - 180;
+        
+        const el = document.createElement('div');
+        el.className = 'marker marker-opponent session-user-marker';
+        el.innerHTML = `<div class="marker-label">👤</div>`;
+        el.style.cursor = 'pointer';
+        el.title = `Player in Session #${session.sessionId}`;
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!wallet) {
+            alert('Connect your wallet to join this session!');
+          }
+        });
+        
+        try {
+          new mapboxgl.Marker({ element: el })
+            .setLngLat([lng, lat])
+            .addTo(map.current!);
+        } catch (error) {
+          console.error('Failed to add session marker:', error);
+        }
+      }
+      
+      if (session.player2 && session.p2CellId) {
+        const lat = (session.p2CellId % 360) * 0.5 - 90;
+        const lng = Math.floor(session.p2CellId / 360) * 0.5 - 180;
+        
+        const el = document.createElement('div');
+        el.className = 'marker marker-opponent session-user-marker';
+        el.innerHTML = `<div class="marker-label">👤</div>`;
+        el.style.cursor = 'pointer';
+        el.title = `Player in Session #${session.sessionId}`;
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!wallet) {
+            alert('Connect your wallet to join this session!');
+          }
+        });
+        
+        try {
+          new mapboxgl.Marker({ element: el })
+            .setLngLat([lng, lat])
+            .addTo(map.current!);
+        } catch (error) {
+          console.error('Failed to add session marker:', error);
+        }
+      }
+    });
+  }, [wallet]);
+  
   // Fetch active sessions (poll recent session IDs)
   const fetchActiveSessions = useCallback(async () => {
     if (!readOnlyClient) return;
 
     try {
-      const sessions: Array<{ sessionId: number; player1: string | null; player2: string | null; state: string }> = [];
+      const sessions: Array<{ 
+        sessionId: number; 
+        player1: string | null; 
+        player2: string | null; 
+        state: string;
+        p1CellId?: number;
+        p2CellId?: number;
+      }> = [];
       
       // Poll sessions 1-50 to find active ones
       // In production, you'd want a better way to track sessions
@@ -448,7 +534,9 @@ const App: React.FC = () => {
               sessionId,
               player1: session.player1 || null,
               player2: session.player2 || null,
-              state: session.state || 'Unknown'
+              state: session.state || 'Unknown',
+              p1CellId: session.p1CellId || session.p1_cell_id,
+              p2CellId: session.p2CellId || session.p2_cell_id,
             });
           }
         } catch (error) {
@@ -459,10 +547,15 @@ const App: React.FC = () => {
       
       setActiveSessions(sessions);
       console.log('[App] Active sessions:', sessions);
+      
+      // Update markers on map from active sessions (even without wallet)
+      if (map.current && map.current.loaded()) {
+        updateSessionMarkers(sessions);
+      }
     } catch (error) {
       console.error('[App] Failed to fetch active sessions:', error);
     }
-  }, [readOnlyClient]);
+  }, [readOnlyClient, updateSessionMarkers]);
 
   // Initialize read-only client on mount (for fetching public data without wallet)
   useEffect(() => {
@@ -507,6 +600,38 @@ const App: React.FC = () => {
       return () => clearInterval(sessionInterval);
     }
   }, [readOnlyClient, fetchActiveSessions]);
+  
+  // Check user's current session when wallet is connected
+  useEffect(() => {
+    const checkUserSession = async () => {
+      if (!wallet || !contractClient) {
+        setUserCurrentSession(null);
+        return;
+      }
+      
+      try {
+        const publicKey = await wallet.getPublicKey(true);
+        // Check if user is in any active session
+        for (const session of activeSessions) {
+          if ((session.player1 === publicKey || session.player2 === publicKey) && 
+              (session.state === 'Waiting' || session.state === 'Active')) {
+            setUserCurrentSession(session.sessionId);
+            return;
+          }
+        }
+        setUserCurrentSession(null);
+      } catch (error) {
+        console.error('[App] Failed to check user session:', error);
+        setUserCurrentSession(null);
+      }
+    };
+    
+    if (wallet && activeSessions.length > 0) {
+      checkUserSession();
+    } else if (!wallet) {
+      setUserCurrentSession(null);
+    }
+  }, [wallet, contractClient, activeSessions]);
 
   // Restore wallet connection on page load
   useEffect(() => {

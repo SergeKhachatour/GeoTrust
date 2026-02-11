@@ -28,19 +28,27 @@
   transition: all 0.3s ease;
 }
 
-/* On mobile, move overlay up to ensure Connect Wallet button is visible */
+/* On mobile, move overlay to bottom to not block map navigation */
 @media (max-width: 768px) {
   .overlay {
-    bottom: auto;
-    top: 20px;
+    bottom: 20px;
+    top: auto;
     left: 10px;
     right: 10px;
     max-width: none;
     width: calc(100% - 20px);
+    max-height: 50vh; /* Limit height so it doesn't cover entire map */
+    overflow-y: auto; /* Allow scrolling if content is too tall */
   }
   
   .overlay.no-wallet {
-    top: 10px;
+    max-height: 200px; /* Smaller when no wallet connected */
+  }
+  
+  /* Make overlay semi-transparent on mobile so map is still visible */
+  .overlay.no-wallet {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(8px);
   }
 }
 
