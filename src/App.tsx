@@ -43,13 +43,25 @@ const App: React.FC = () => {
 
   // Define updateCountryOverlay first (used by loadCountryOverlay)
   const updateCountryOverlay = useCallback(() => {
-    if (!map.current || !map.current.getSource('countries')) return;
+    if (!map.current || !map.current.getSource('countries')) {
+      console.log('[App] updateCountryOverlay: Map or countries source not ready');
+      return;
+    }
 
     const source = map.current.getSource('countries') as mapboxgl.GeoJSONSource;
     const data = source._data as GeoJSON.FeatureCollection;
 
-    if (!data || !data.features) return;
+    if (!data || !data.features) {
+      console.log('[App] updateCountryOverlay: No data or features');
+      return;
+    }
 
+    console.log('[App] updateCountryOverlay: Updating', data.features.length, 'features', {
+      allowedCount: allowedCountries.size,
+      defaultAllowAll
+    });
+
+    let updatedCount = 0;
     data.features.forEach((feature) => {
       // Ensure properties object exists
       if (!feature.properties) {
@@ -103,9 +115,17 @@ const App: React.FC = () => {
       }
       
       // Always set allowed as a boolean
+      const wasAllowed = feature.properties.allowed;
       feature.properties.allowed = Boolean(allowed);
+      
+      // Count updates for debugging
+      if (wasAllowed !== feature.properties.allowed) {
+        updatedCount++;
+      }
     });
 
+    console.log('[App] updateCountryOverlay: Updated', updatedCount, 'features');
+    
     // Update the source with modified data
     source.setData(data);
   }, [defaultAllowAll, allowedCountries]);
@@ -382,17 +402,32 @@ const App: React.FC = () => {
 
   // Update country overlay when country policy or map changes
   useEffect(() => {
-    if (map.current && map.current.loaded()) {
-      // Check if countries source exists
-      const source = map.current.getSource('countries');
-      if (source) {
-        // Map is ready and countries source exists, update overlay
-        console.log('[App] Updating country overlay with current policy');
-        updateCountryOverlay();
-      } else {
-        // Countries source doesn't exist yet, wait a bit and try again
-        console.log('[App] Countries source not ready yet, will update when loaded');
+    const updateOverlayIfReady = () => {
+      if (map.current && map.current.loaded()) {
+        // Check if countries source exists
+        const source = map.current.getSource('countries');
+        if (source) {
+          // Map is ready and countries source exists, update overlay
+          console.log('[App] Updating country overlay with current policy', { 
+            allowedCount: allowedCountries.size, 
+            defaultAllowAll 
+          });
+          updateCountryOverlay();
+          return true;
+        }
       }
+      return false;
+    };
+    
+    // Try to update immediately
+    if (!updateOverlayIfReady()) {
+      // Countries source doesn't exist yet, wait a bit and try again
+      console.log('[App] Countries source not ready yet, will retry');
+      // Retry after a delay
+      const retryTimer = setTimeout(() => {
+        updateOverlayIfReady();
+      }, 500);
+      return () => clearTimeout(retryTimer);
     }
   }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
 
