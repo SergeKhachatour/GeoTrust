@@ -9,6 +9,8 @@ interface AdminPanelProps {
   defaultAllowAll: boolean;
   onCountryToggle: () => void;
   map: mapboxgl.Map | null;
+  minimized?: boolean;
+  onToggleMinimize?: () => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -17,6 +19,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   defaultAllowAll,
   onCountryToggle,
   map,
+  minimized = false,
+  onToggleMinimize,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -163,7 +167,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <div className="admin-panel">
-      <h3>Admin Panel</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: minimized ? '0' : '12px' }}>
+        <h3 style={{ margin: 0 }}>Admin Panel</h3>
+        {onToggleMinimize && (
+          <button 
+            className="icon-button" 
+            onClick={onToggleMinimize} 
+            title={minimized ? 'Expand' : 'Minimize'}
+            style={{ fontSize: '18px', padding: '4px 8px' }}
+          >
+            {minimized ? '▼' : '▲'}
+          </button>
+        )}
+      </div>
+      {!minimized && (
+        <>
       <div style={{ marginBottom: '12px' }}>
         <label>
           <input
@@ -202,6 +220,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       <p style={{ marginTop: '12px', fontSize: '12px', color: '#666' }}>
         Click on map to toggle countries
       </p>
+        </>
+      )}
     </div>
   );
 };

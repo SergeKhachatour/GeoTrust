@@ -9,6 +9,8 @@ interface GamePanelProps {
   maxDistance: number;
   onDistanceChange: (distance: number) => void;
   otherUsersCount: number;
+  minimized?: boolean;
+  onToggleMinimize?: () => void;
 }
 
 export const GamePanel: React.FC<GamePanelProps> = ({
@@ -20,6 +22,8 @@ export const GamePanel: React.FC<GamePanelProps> = ({
   maxDistance,
   onDistanceChange,
   otherUsersCount,
+  minimized = false,
+  onToggleMinimize,
 }) => {
   const copyLink = () => {
     navigator.clipboard.writeText(sessionLink);
@@ -28,7 +32,21 @@ export const GamePanel: React.FC<GamePanelProps> = ({
 
   return (
     <div className="game-panel">
-      <h3>GeoTrust Match</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: minimized ? '0' : '16px' }}>
+        <h3 style={{ margin: 0 }}>GeoTrust Match</h3>
+        {onToggleMinimize && (
+          <button 
+            className="icon-button" 
+            onClick={onToggleMinimize} 
+            title={minimized ? 'Expand' : 'Minimize'}
+            style={{ fontSize: '18px', padding: '4px 8px' }}
+          >
+            {minimized ? '▼' : '▲'}
+          </button>
+        )}
+      </div>
+      {!minimized && (
+        <>
       <button className="primary-button" onClick={onShareLocation}>
         {playerLocation ? 'Update Location' : 'Share Location / Join Game'}
       </button>
@@ -75,6 +93,8 @@ export const GamePanel: React.FC<GamePanelProps> = ({
           </>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

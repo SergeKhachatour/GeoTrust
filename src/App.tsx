@@ -7,6 +7,7 @@ import { ContractClient } from './contract';
 import { ReadOnlyContractClient } from './contract-readonly';
 import { AdminPanel } from './AdminPanel';
 import { GamePanel } from './GamePanel';
+import { CollapsiblePanel } from './CollapsiblePanel';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 
 // Set Mapbox access token
@@ -48,6 +49,10 @@ const App: React.FC = () => {
     p2CellId?: number;
   }>>([]);
   const [userCurrentSession, setUserCurrentSession] = useState<number | null>(null);
+  const [gamePanelMinimized, setGamePanelMinimized] = useState(false);
+  const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
+  const [otherSessionsMinimized, setOtherSessionsMinimized] = useState(false);
+  const [adminPanelMinimized, setAdminPanelMinimized] = useState(false);
 
   // Define updateCountryOverlay first (used by loadCountryOverlay)
   const updateCountryOverlay = useCallback(() => {
@@ -1478,12 +1483,19 @@ const App: React.FC = () => {
                   maxDistance={maxDistance}
                   onDistanceChange={setMaxDistance}
                   otherUsersCount={otherUsers.length}
+                  minimized={gamePanelMinimized}
+                  onToggleMinimize={() => setGamePanelMinimized(!gamePanelMinimized)}
                 />
                 
                 {/* Show user's current session if connected */}
                 {userCurrentSession !== null && (
-                  <div className="game-panel" style={{ marginTop: '8px', backgroundColor: '#FFD700', color: '#000', padding: '12px', borderRadius: '8px' }}>
-                    <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>Your Session</h3>
+                  <CollapsiblePanel
+                    title="Your Session"
+                    minimized={yourSessionMinimized}
+                    onToggleMinimize={() => setYourSessionMinimized(!yourSessionMinimized)}
+                    className=""
+                    style={{ marginTop: '8px', backgroundColor: '#FFD700', color: '#000', padding: '12px', borderRadius: '8px' }}
+                  >
                     <div style={{ fontSize: '12px', marginBottom: '8px' }}>
                       <div><strong>Session #{userCurrentSession}</strong></div>
                       <div>Status: {activeSessions.find(s => s.sessionId === userCurrentSession)?.state || 'Active'}</div>
@@ -1498,15 +1510,18 @@ const App: React.FC = () => {
                     >
                       View Session Details
                     </button>
-                  </div>
+                  </CollapsiblePanel>
                 )}
                 
                 {/* Show other active sessions */}
                 {activeSessions.length > 0 && (
-                  <div className="game-panel" style={{ marginTop: '8px' }}>
-                    <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
-                      {userCurrentSession !== null ? 'Other Sessions' : 'Active Sessions'}
-                    </h3>
+                  <CollapsiblePanel
+                    title={userCurrentSession !== null ? 'Other Sessions' : 'Active Sessions'}
+                    minimized={otherSessionsMinimized}
+                    onToggleMinimize={() => setOtherSessionsMinimized(!otherSessionsMinimized)}
+                    className=""
+                    style={{ marginTop: '8px' }}
+                  >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
                       {activeSessions
                         .filter(s => s.sessionId !== userCurrentSession)
@@ -1529,7 +1544,7 @@ const App: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </CollapsiblePanel>
                 )}
                 
                 {isAdmin && (
@@ -1539,6 +1554,8 @@ const App: React.FC = () => {
                     defaultAllowAll={defaultAllowAll}
                     onCountryToggle={fetchCountryPolicy}
                     map={map.current}
+                    minimized={adminPanelMinimized}
+                    onToggleMinimize={() => setAdminPanelMinimized(!adminPanelMinimized)}
                   />
                 )}
               </>
