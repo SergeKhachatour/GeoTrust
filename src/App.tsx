@@ -1596,7 +1596,33 @@ const App: React.FC = () => {
                   >
                     <div style={{ fontSize: '12px', marginBottom: '8px' }}>
                       <div><strong>Session #{userCurrentSession}</strong></div>
-                      <div>Status: {activeSessions.find(s => s.sessionId === userCurrentSession)?.state || 'Active'}</div>
+                      {(() => {
+                        const session = activeSessions.find(s => s.sessionId === userCurrentSession);
+                        return (
+                          <>
+                            <div style={{ marginTop: '4px' }}><strong>Status:</strong> {session?.state || 'Active'}</div>
+                            {session?.player1 && (
+                              <div style={{ marginTop: '4px' }}>
+                                <strong>Player 1:</strong> {session.player1.slice(0, 6)}...{session.player1.slice(-4)}
+                                {session.p1CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p1CellId})</span>}
+                                {session.p1Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p1Country})</span>}
+                              </div>
+                            )}
+                            {session?.player2 && (
+                              <div style={{ marginTop: '4px' }}>
+                                <strong>Player 2:</strong> {session.player2.slice(0, 6)}...{session.player2.slice(-4)}
+                                {session.p2CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p2CellId})</span>}
+                                {session.p2Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p2Country})</span>}
+                              </div>
+                            )}
+                            {session?.createdLedger && (
+                              <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>
+                                Created at ledger: {session.createdLedger}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                     <button 
                       className="primary-button" 

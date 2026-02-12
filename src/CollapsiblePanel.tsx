@@ -19,13 +19,13 @@ export const CollapsiblePanel: React.FC<CollapsiblePanelProps> = ({
 }) => {
   return (
     <div className={`game-panel ${className}`} style={style}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: minimized ? '0' : '12px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px' }}>{title}</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: minimized ? '0' : '12px', gap: '8px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', flex: 1, whiteSpace: 'nowrap' }}>{title}</h3>
         <button 
           className="icon-button" 
           onClick={onToggleMinimize} 
           title={minimized ? 'Expand' : 'Minimize'}
-          style={{ fontSize: '18px', padding: '4px 8px' }}
+          style={{ fontSize: '10px', padding: '2px 4px', minWidth: '20px', flexShrink: 0 }}
         >
           {minimized ? '▼' : '▲'}
         </button>

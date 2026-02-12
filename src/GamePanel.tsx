@@ -32,14 +32,14 @@ export const GamePanel: React.FC<GamePanelProps> = ({
 
   return (
     <div className="game-panel">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: minimized ? '0' : '16px' }}>
-        <h3 style={{ margin: 0 }}>GeoTrust Match</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: minimized ? '0' : '16px', gap: '8px' }}>
+        <h3 style={{ margin: 0, flex: 1, whiteSpace: 'nowrap' }}>GeoTrust Match</h3>
         {onToggleMinimize && (
           <button 
             className="icon-button" 
             onClick={onToggleMinimize} 
             title={minimized ? 'Expand' : 'Minimize'}
-            style={{ fontSize: '12px', padding: '2px 6px' }}
+            style={{ fontSize: '10px', padding: '2px 4px', minWidth: '20px', flexShrink: 0 }}
           >
             {minimized ? '▼' : '▲'}
           </button>
