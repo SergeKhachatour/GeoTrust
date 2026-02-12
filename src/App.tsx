@@ -1479,6 +1479,59 @@ const App: React.FC = () => {
                   onDistanceChange={setMaxDistance}
                   otherUsersCount={otherUsers.length}
                 />
+                
+                {/* Show user's current session if connected */}
+                {userCurrentSession !== null && (
+                  <div className="game-panel" style={{ marginTop: '8px', backgroundColor: '#FFD700', color: '#000', padding: '12px', borderRadius: '8px' }}>
+                    <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>Your Session</h3>
+                    <div style={{ fontSize: '12px', marginBottom: '8px' }}>
+                      <div><strong>Session #{userCurrentSession}</strong></div>
+                      <div>Status: {activeSessions.find(s => s.sessionId === userCurrentSession)?.state || 'Active'}</div>
+                    </div>
+                    <button 
+                      className="primary-button" 
+                      onClick={() => {
+                        // Note: Contract doesn't have leave_session, but we can show info
+                        alert('To leave this session, wait for it to end or create a new session. The session will automatically end when resolved.');
+                      }}
+                      style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#000', color: '#FFD700', width: '100%' }}
+                    >
+                      View Session Details
+                    </button>
+                  </div>
+                )}
+                
+                {/* Show other active sessions */}
+                {activeSessions.length > 0 && (
+                  <div className="game-panel" style={{ marginTop: '8px' }}>
+                    <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
+                      {userCurrentSession !== null ? 'Other Sessions' : 'Active Sessions'}
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                      {activeSessions
+                        .filter(s => s.sessionId !== userCurrentSession)
+                        .map(session => (
+                        <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
+                          <div><strong>Session #{session.sessionId}</strong></div>
+                          <div>Player 1: {session.player1 ? `${session.player1.slice(0, 6)}...${session.player1.slice(-4)}` : 'Waiting...'}</div>
+                          <div>Player 2: {session.player2 ? `${session.player2.slice(0, 6)}...${session.player2.slice(-4)}` : 'Waiting...'}</div>
+                          <div>State: {session.state}</div>
+                          {session.state === 'Waiting' && (
+                            <button 
+                              className="primary-button" 
+                              onClick={() => handleJoinSession(session.sessionId)}
+                              style={{ marginTop: '8px', padding: '6px 12px', fontSize: '11px', width: '100%' }}
+                              disabled={userCurrentSession !== null}
+                            >
+                              {userCurrentSession !== null ? 'Already in a Session' : 'Join Session'}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 {isAdmin && (
                   <AdminPanel
                     contractClient={contractClient!}

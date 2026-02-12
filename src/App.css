@@ -37,8 +37,10 @@
     right: 10px;
     max-width: none;
     width: calc(100% - 20px);
-    max-height: 50vh; /* Limit height so it doesn't cover entire map */
+    max-height: 60vh; /* Limit height so it doesn't cover entire map */
     overflow-y: auto; /* Allow scrolling if content is too tall */
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
   }
   
   .overlay.no-wallet {
@@ -49,6 +51,11 @@
   .overlay.no-wallet {
     background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(8px);
+  }
+  
+  /* Ensure game panels stack nicely on mobile */
+  .game-panel {
+    margin-bottom: 8px;
   }
 }
 
@@ -566,6 +573,16 @@
     width: 100%;
     max-width: 100%;
     padding: 16px;
+    font-size: 14px;
+  }
+  
+  .game-panel h3 {
+    font-size: 18px;
+  }
+  
+  .game-panel button {
+    font-size: 14px;
+    padding: 10px 16px;
   }
 
   .marker-popup {
