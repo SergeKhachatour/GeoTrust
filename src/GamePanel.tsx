@@ -39,7 +39,7 @@ export const GamePanel: React.FC<GamePanelProps> = ({
             className="icon-button" 
             onClick={onToggleMinimize} 
             title={minimized ? 'Expand' : 'Minimize'}
-            style={{ fontSize: '18px', padding: '4px 8px' }}
+            style={{ fontSize: '12px', padding: '2px 6px' }}
           >
             {minimized ? '▼' : '▲'}
           </button>

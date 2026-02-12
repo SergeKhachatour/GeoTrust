@@ -9,6 +9,7 @@ import { AdminPanel } from './AdminPanel';
 import { GamePanel } from './GamePanel';
 import { CollapsiblePanel } from './CollapsiblePanel';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
+import { Horizon } from '@stellar/stellar-sdk';
 
 // Set Mapbox access token
 const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
@@ -47,7 +48,11 @@ const App: React.FC = () => {
     state: string;
     p1CellId?: number;
     p2CellId?: number;
+    p1Country?: number;
+    p2Country?: number;
+    createdLedger?: number;
   }>>([]);
+  const [accountBalance, setAccountBalance] = useState<string | null>(null);
   const [userCurrentSession, setUserCurrentSession] = useState<number | null>(null);
   const [gamePanelMinimized, setGamePanelMinimized] = useState(false);
   const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
@@ -527,6 +532,9 @@ const App: React.FC = () => {
         state: string;
         p1CellId?: number;
         p2CellId?: number;
+        p1Country?: number;
+        p2Country?: number;
+        createdLedger?: number;
       }> = [];
       
       // Poll sessions 1-50 to find active ones
@@ -542,6 +550,9 @@ const App: React.FC = () => {
               state: session.state || 'Unknown',
               p1CellId: session.p1CellId || session.p1_cell_id,
               p2CellId: session.p2CellId || session.p2_cell_id,
+              p1Country: session.p1Country || session.p1_country,
+              p2Country: session.p2Country || session.p2_country,
+              createdLedger: session.createdLedger || session.created_ledger,
             });
           }
         } catch (error) {
@@ -606,6 +617,38 @@ const App: React.FC = () => {
     }
   }, [readOnlyClient, fetchActiveSessions]);
   
+  // Fetch account balance when wallet is connected
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (!wallet || !walletAddress) {
+        setAccountBalance(null);
+        return;
+      }
+
+      try {
+        const server = new Horizon.Server('https://horizon-testnet.stellar.org');
+        const account = await server.loadAccount(walletAddress);
+        const xlmBalance = account.balances.find((b: any) => b.asset_type === 'native');
+        if (xlmBalance) {
+          const balance = parseFloat(xlmBalance.balance).toFixed(2);
+          setAccountBalance(balance);
+        } else {
+          setAccountBalance('0.00');
+        }
+      } catch (error) {
+        console.error('[App] Failed to fetch balance:', error);
+        setAccountBalance(null);
+      }
+    };
+
+    if (wallet && walletAddress) {
+      fetchBalance();
+      // Refresh balance every 30 seconds
+      const balanceInterval = setInterval(fetchBalance, 30000);
+      return () => clearInterval(balanceInterval);
+    }
+  }, [wallet, walletAddress]);
+
   // Check user's current session when wallet is connected
   useEffect(() => {
     const checkUserSession = async () => {
@@ -1453,17 +1496,40 @@ const App: React.FC = () => {
                         .map(session => (
                         <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
                           <div><strong>Session #{session.sessionId}</strong></div>
-                          <div>Player 1: {session.player1 ? `${session.player1.slice(0, 6)}...${session.player1.slice(-4)}` : 'Waiting...'}</div>
-                          <div>Player 2: {session.player2 ? `${session.player2.slice(0, 6)}...${session.player2.slice(-4)}` : 'Waiting...'}</div>
-                          <div>State: {session.state}</div>
+                          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div>
+                              <strong>Player 1:</strong> {session.player1 ? (
+                                <span>
+                                  {session.player1.slice(0, 6)}...{session.player1.slice(-4)}
+                                  {session.p1CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p1CellId})</span>}
+                                  {session.p1Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p1Country})</span>}
+                                </span>
+                              ) : 'Waiting...'}
+                            </div>
+                            <div>
+                              <strong>Player 2:</strong> {session.player2 ? (
+                                <span>
+                                  {session.player2.slice(0, 6)}...{session.player2.slice(-4)}
+                                  {session.p2CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p2CellId})</span>}
+                                  {session.p2Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p2Country})</span>}
+                                </span>
+                              ) : 'Waiting...'}
+                            </div>
+                            <div><strong>State:</strong> {session.state}</div>
+                            {session.createdLedger && (
+                              <div style={{ color: '#666', fontSize: '10px' }}>
+                                Created at ledger: {session.createdLedger}
+                              </div>
+                            )}
+                          </div>
                           {session.state === 'Waiting' && (
                             <button 
                               className="primary-button" 
                               onClick={() => handleJoinSession(session.sessionId)}
-                              style={{ marginTop: '8px', padding: '6px 12px', fontSize: '11px' }}
-                              disabled={!wallet || userCurrentSession !== null}
+                              style={{ marginTop: '8px', padding: '6px 12px', fontSize: '11px', width: '100%' }}
+                              disabled={userCurrentSession !== null}
                             >
-                              {!wallet ? 'Connect Wallet to Join' : userCurrentSession !== null ? 'Already in a Session' : 'Join Session'}
+                              {userCurrentSession !== null ? 'Already in a Session' : 'Join Session'}
                             </button>
                           )}
                         </div>
@@ -1528,9 +1594,32 @@ const App: React.FC = () => {
                         .map(session => (
                         <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
                           <div><strong>Session #{session.sessionId}</strong></div>
-                          <div>Player 1: {session.player1 ? `${session.player1.slice(0, 6)}...${session.player1.slice(-4)}` : 'Waiting...'}</div>
-                          <div>Player 2: {session.player2 ? `${session.player2.slice(0, 6)}...${session.player2.slice(-4)}` : 'Waiting...'}</div>
-                          <div>State: {session.state}</div>
+                          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div>
+                              <strong>Player 1:</strong> {session.player1 ? (
+                                <span>
+                                  {session.player1.slice(0, 6)}...{session.player1.slice(-4)}
+                                  {session.p1CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p1CellId})</span>}
+                                  {session.p1Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p1Country})</span>}
+                                </span>
+                              ) : 'Waiting...'}
+                            </div>
+                            <div>
+                              <strong>Player 2:</strong> {session.player2 ? (
+                                <span>
+                                  {session.player2.slice(0, 6)}...{session.player2.slice(-4)}
+                                  {session.p2CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p2CellId})</span>}
+                                  {session.p2Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p2Country})</span>}
+                                </span>
+                              ) : 'Waiting...'}
+                            </div>
+                            <div><strong>State:</strong> {session.state}</div>
+                            {session.createdLedger && (
+                              <div style={{ color: '#666', fontSize: '10px' }}>
+                                Created at ledger: {session.createdLedger}
+                              </div>
+                            )}
+                          </div>
                           {session.state === 'Waiting' && (
                             <button 
                               className="primary-button" 
