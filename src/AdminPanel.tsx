@@ -174,7 +174,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             className="icon-button" 
             onClick={onToggleMinimize} 
             title={minimized ? 'Expand' : 'Minimize'}
-            style={{ fontSize: '10px', padding: '2px 4px', minWidth: '20px', flexShrink: 0 }}
+            style={{ fontSize: '10px', padding: '1px 3px', width: '18px', height: '18px', flexShrink: 0 }}
           >
             {minimized ? '▼' : '▲'}
           </button>

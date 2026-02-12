@@ -137,6 +137,16 @@
   cursor: pointer;
   font-size: 12px;
   transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+/* Smaller icon buttons for panel minimize buttons */
+.game-panel .icon-button,
+.admin-panel .icon-button {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  padding: 1px 3px;
 }
 
 .icon-button:hover {
