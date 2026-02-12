@@ -1391,9 +1391,41 @@ const App: React.FC = () => {
       <div className={`overlay ${overlayMinimized && wallet ? 'minimized' : ''} ${!wallet ? 'no-wallet' : ''}`}>
         <div className="overlay-header">
           {wallet && walletAddress && (
-            <div className="wallet-status">
-              <span className="wallet-address">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
-              {isAdmin && <span className="admin-badge">ADMIN</span>}
+            <div className="wallet-status" style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="wallet-address" style={{ fontFamily: 'Courier New', fontSize: '12px' }}>
+                  {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                </span>
+                {isAdmin && <span className="admin-badge">ADMIN</span>}
+              </div>
+              {accountBalance !== null && (
+                <div style={{ fontSize: '11px', color: '#666' }}>
+                  Balance: {accountBalance} XLM
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                <button 
+                  className="icon-button" 
+                  onClick={() => {
+                    navigator.clipboard.writeText(walletAddress);
+                    alert('Address copied to clipboard!');
+                  }}
+                  title="Copy Address"
+                  style={{ fontSize: '10px', padding: '2px 6px' }}
+                >
+                  📋
+                </button>
+                <a
+                  href={`https://stellar.expert/explorer/testnet/account/${walletAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="icon-button"
+                  title="View on Stellar Explorer"
+                  style={{ fontSize: '10px', padding: '2px 6px', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  🔗
+                </a>
+              </div>
             </div>
           )}
           <div className="overlay-controls">
