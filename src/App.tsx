@@ -465,6 +465,8 @@ const App: React.FC = () => {
     // Remove existing session markers
     document.querySelectorAll('.session-user-marker').forEach(m => m.remove());
     
+    console.log('[App] updateSessionMarkers: Processing', sessions.length, 'sessions');
+    
     // Add markers for players in active sessions
     // For demo purposes, we'll place markers at approximate locations based on cell_id
     // In production, you'd store actual lat/lon or fetch from a location service
@@ -496,8 +498,14 @@ const App: React.FC = () => {
           new mapboxgl.Marker({ element: el })
             .setLngLat([lng, lat])
             .addTo(map.current!);
+          console.log('[App] Added session marker for Player 1:', {
+            sessionId: session.sessionId,
+            publicKey: session.player1,
+            publicKeyShort,
+            location: [lng, lat]
+          });
         } catch (error) {
-          console.error('Failed to add session marker:', error);
+          console.error('[App] Failed to add session marker:', error);
         }
       }
       
@@ -527,8 +535,14 @@ const App: React.FC = () => {
           new mapboxgl.Marker({ element: el })
             .setLngLat([lng, lat])
             .addTo(map.current!);
+          console.log('[App] Added session marker for Player 2:', {
+            sessionId: session.sessionId,
+            publicKey: session.player2,
+            publicKeyShort,
+            location: [lng, lat]
+          });
         } catch (error) {
-          console.error('Failed to add session marker:', error);
+          console.error('[App] Failed to add session marker:', error);
         }
       }
     });
@@ -978,8 +992,14 @@ const App: React.FC = () => {
             .addTo(map.current!);
           
           marker.getElement().setAttribute('data-user-id', user.id);
+          console.log('[App] Added other-user marker (NO PUBLIC KEY):', {
+            userId: user.id,
+            location: user.location,
+            distance: user.distance,
+            note: 'This marker has no public key - it is from the distance-based "other users"" feature'
+          });
         } catch (error) {
-          console.error('Failed to add marker:', error);
+          console.error('[App] Failed to add other-user marker:', error);
         }
       });
     };
@@ -1657,16 +1677,16 @@ const App: React.FC = () => {
                 )}
                 
                 {/* Show other active sessions - always show all sessions except user's current one */}
-                {activeSessions.filter(s => s.sessionId !== userCurrentSession).length > 0 && (
-                  <CollapsiblePanel
-                    title={userCurrentSession !== null ? 'Other Sessions' : 'Active Sessions'}
-                    minimized={otherSessionsMinimized}
-                    onToggleMinimize={() => setOtherSessionsMinimized(!otherSessionsMinimized)}
-                    className=""
-                    style={{ marginTop: '8px' }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                      {activeSessions
+                <CollapsiblePanel
+                  title={userCurrentSession !== null ? 'Other Sessions' : 'Active Sessions'}
+                  minimized={otherSessionsMinimized}
+                  onToggleMinimize={() => setOtherSessionsMinimized(!otherSessionsMinimized)}
+                  className=""
+                  style={{ marginTop: '8px' }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                    {activeSessions.filter(s => s.sessionId !== userCurrentSession).length > 0 ? (
+                      activeSessions
                         .filter(s => s.sessionId !== userCurrentSession)
                         .map(session => (
                         <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
@@ -1708,10 +1728,14 @@ const App: React.FC = () => {
                             </button>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </CollapsiblePanel>
-                )}
+                      ))
+                    ) : (
+                      <div style={{ padding: '12px', textAlign: 'center', color: '#666', fontSize: '12px' }}>
+                        No other active sessions found. Sessions will appear here when other players create or join sessions.
+                      </div>
+                    )}
+                  </div>
+                </CollapsiblePanel>
                 
                 {isAdmin && (
                   <AdminPanel
