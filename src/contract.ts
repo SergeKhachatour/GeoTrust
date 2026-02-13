@@ -149,6 +149,33 @@ export class ContractClient {
     await this.call('set_game_hub', gameHubId);
   }
 
+  async getGameHub(): Promise<string | null> {
+    try {
+      const result = await this.call('get_game_hub');
+      if (!result || result === null || result === undefined) {
+        return null;
+      }
+      if (typeof result === 'string') {
+        return result;
+      }
+      if (result && typeof result === 'object') {
+        if (result.toString && typeof result.toString === 'function') {
+          const str = result.toString();
+          if (str && str.length === 56 && (str.startsWith('G') || str.startsWith('C'))) {
+            return str;
+          }
+        }
+        if ((result as any).address) {
+          return String((result as any).address);
+        }
+      }
+      return String(result);
+    } catch (error) {
+      console.error('[ContractClient] Failed to get Game Hub:', error);
+      return null;
+    }
+  }
+
   async createSession(): Promise<number> {
     console.log('[ContractClient] Creating session...');
     const result = await this.call('create_session');

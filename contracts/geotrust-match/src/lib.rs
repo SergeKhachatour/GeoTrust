@@ -167,6 +167,11 @@ impl GeoTrustMatch {
         env.storage().instance().get(&symbol_short!("Admin"))
     }
 
+    /// Get Game Hub address
+    pub fn get_game_hub(env: Env) -> Option<Address> {
+        env.storage().instance().get(&symbol_short!("GameHub"))
+    }
+
     /// Get country allowed status
     pub fn get_country_allowed(env: Env, country: u32) -> Option<bool> {
         Self::is_country_allowed_internal(&env, country).then_some(true)
@@ -330,6 +335,7 @@ impl GeoTrustMatch {
                 let game_hub = GameHubClient::new(&env, &game_hub_addr);
                 
                 // Call Game Hub to start the session
+                // This will create a transaction visible on Stellar Expert
                 game_hub.start_game(
                     &game_id,
                     &session_id,
@@ -338,6 +344,9 @@ impl GeoTrustMatch {
                     &0i128,
                     &0i128,
                 );
+            } else {
+                // Log that Game Hub is not configured (this won't appear in production but helps debugging)
+                // In production, you'd want to handle this gracefully
             }
         } else {
             panic!("Session is full");
@@ -386,7 +395,11 @@ impl GeoTrustMatch {
             let game_hub = GameHubClient::new(&env, &game_hub_addr);
             
             // Call GameHub to end the session
+            // This will create a transaction visible on Stellar Expert
             game_hub.end_game(&session_id, &player1_won);
+        } else {
+            // Log that Game Hub is not configured (this won't appear in production but helps debugging)
+            // In production, you'd want to handle this gracefully
         }
 
         env.storage().temporary().set(&key, &session);

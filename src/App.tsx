@@ -1096,11 +1096,42 @@ const App: React.FC = () => {
           // Automatically set Game Hub contract ID if available in env
           const gameHubId = process.env.REACT_APP_GAME_HUB_ID;
           console.log('[App] REACT_APP_GAME_HUB_ID from env:', gameHubId);
+          
+          // First check if Game Hub is already set
+          try {
+            const currentGameHub = await contractClient.getGameHub();
+            if (currentGameHub) {
+              console.log('[App] ✅ Game Hub already set in contract:', currentGameHub);
+              if (gameHubId && currentGameHub !== gameHubId) {
+                console.warn('[App] ⚠️ Game Hub mismatch! Contract has:', currentGameHub, 'but env has:', gameHubId);
+              }
+            } else {
+              console.log('[App] Game Hub not set in contract, will set it now');
+            }
+          } catch (error) {
+            console.warn('[App] Could not check Game Hub status (get_game_hub may not be implemented yet):', error);
+          }
+          
           if (gameHubId) {
             try {
               console.log('[App] Setting Game Hub contract:', gameHubId);
               await contractClient.setGameHub(gameHubId);
-              console.log('[App] Game Hub contract ID set successfully:', gameHubId);
+              console.log('[App] ✅ Game Hub contract ID set successfully:', gameHubId);
+              
+              // Verify it was set
+              try {
+                const verifyGameHub = await contractClient.getGameHub();
+                if (verifyGameHub === gameHubId) {
+                  console.log('[App] ✅ Verified Game Hub is set correctly in contract');
+                  console.log('[App] ✅ start_game and end_game will be called when sessions become Active and are resolved');
+                } else {
+                  console.warn('[App] ⚠️ Game Hub verification failed. Expected:', gameHubId, 'Got:', verifyGameHub);
+                  console.warn('[App] ⚠️ This means start_game and end_game will NOT be called!');
+                  console.warn('[App] ⚠️ Please manually set Game Hub using: set_game_hub');
+                }
+              } catch (verifyError) {
+                console.warn('[App] Could not verify Game Hub (get_game_hub may not be available):', verifyError);
+              }
             } catch (error: any) {
               console.error('[App] Failed to set Game Hub:', error);
               const errorMsg = error?.message || error?.toString() || 'Unknown error';
@@ -1108,7 +1139,7 @@ const App: React.FC = () => {
               if (errorMsg.includes('rejected by user') || errorMsg.includes('Transaction was rejected')) {
                 console.warn('[App] Game Hub setup was cancelled by user');
               } else if (errorMsg.includes('txBadSeq')) {
-                console.warn('[App] Sequence number issue - Game Hub setup will need to be done manually later');
+                console.warn('[App] Sequence number issue - Game Hub will need to be set manually later');
               } else if (errorMsg.includes('already') || errorMsg.includes('set')) {
                 console.warn('[App] Game Hub may already be set');
               } else {
@@ -1116,7 +1147,8 @@ const App: React.FC = () => {
               }
             }
           } else {
-            console.warn('[App] REACT_APP_GAME_HUB_ID not set in environment');
+            console.warn('[App] ⚠️ REACT_APP_GAME_HUB_ID not set in environment');
+            console.warn('[App] ⚠️ Game Hub calls (start_game/end_game) will NOT work!');
           }
         } else {
           console.warn('[App] Skipping Game Hub setup because verifier transaction was rejected');
@@ -1203,6 +1235,9 @@ const App: React.FC = () => {
             
             // Refresh active sessions
             await fetchActiveSessions();
+            console.log('[App] ✅ Session joined successfully');
+            console.log('[App] If this was the second player, start_game should have been called on Game Hub');
+            console.log('[App] Check Stellar Expert Game Hub contract to verify start_game transaction');
           } catch (error: any) {
             console.error('Failed to join session:', error);
             alert(`Failed to join session: ${error.message || error}`);
@@ -1663,6 +1698,36 @@ const App: React.FC = () => {
                         );
                       })()}
                     </div>
+                    {(() => {
+                      const session = activeSessions.find(s => s.sessionId === userCurrentSession);
+                      if (session?.state === 'Active' && contractClient) {
+                        return (
+                          <button 
+                            className="primary-button" 
+                            onClick={async () => {
+                              if (!contractClient) return;
+                              try {
+                                const result = await contractClient.resolveMatch(userCurrentSession);
+                                alert(`Match resolved! ${result.matched ? 'Matched!' : 'No match.'} Winner: ${result.winner ? `${result.winner.slice(0, 6)}...${result.winner.slice(-4)}` : 'None'}`);
+                                // Refresh sessions after resolution
+                                setTimeout(() => {
+                                  if (readOnlyClient) {
+                                    fetchActiveSessions();
+                                  }
+                                }, 2000);
+                              } catch (error: any) {
+                                console.error('Failed to resolve match:', error);
+                                alert(`Failed to resolve match: ${error.message || error}`);
+                              }
+                            }}
+                            style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#000', color: '#FFD700', width: '100%', marginBottom: '8px' }}
+                          >
+                            Resolve Match
+                          </button>
+                        );
+                      }
+                      return null;
+                    })()}
                     <button 
                       className="primary-button" 
                       onClick={() => {
