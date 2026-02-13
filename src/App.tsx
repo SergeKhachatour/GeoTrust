@@ -1746,6 +1746,13 @@ const App: React.FC = () => {
                     map={map.current}
                     minimized={adminPanelMinimized}
                     onToggleMinimize={() => setAdminPanelMinimized(!adminPanelMinimized)}
+                    onAdminChanged={async () => {
+                      // Re-check admin status after admin change
+                      // This will remove admin privileges if the current user is no longer admin
+                      setTimeout(async () => {
+                        await checkAdminStatus();
+                      }, 2000); // Wait 2 seconds for transaction to settle
+                    }}
                   />
                 )}
               </>

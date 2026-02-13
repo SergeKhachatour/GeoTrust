@@ -11,6 +11,7 @@ interface AdminPanelProps {
   map: mapboxgl.Map | null;
   minimized?: boolean;
   onToggleMinimize?: () => void;
+  onAdminChanged?: () => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -21,10 +22,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   map,
   minimized = false,
   onToggleMinimize,
+  onAdminChanged,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [countryList, setCountryList] = useState<Array<{ code: number; name: string; iso2: string }>>([]);
+  const [showChangeAdminOverlay, setShowChangeAdminOverlay] = useState(false);
+  const [newAdminAddress, setNewAdminAddress] = useState('');
+  const [isChangingAdmin, setIsChangingAdmin] = useState(false);
 
   // Load countries from GeoJSON file
   useEffect(() => {
@@ -118,6 +123,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       alert('Failed to update default policy');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleChangeAdmin = async () => {
+    if (!newAdminAddress || newAdminAddress.length !== 56 || !newAdminAddress.startsWith('G')) {
+      alert('Please enter a valid Stellar address (56 characters, starting with G)');
+      return;
+    }
+
+    const confirmMessage = `Are you sure you want to transfer admin rights to:\n${newAdminAddress}\n\nThis will remove your admin privileges and you will be logged out.`;
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setIsChangingAdmin(true);
+    try {
+      await contractClient.setAdmin(newAdminAddress);
+      alert('Admin successfully changed! You will lose admin access.');
+      setShowChangeAdminOverlay(false);
+      setNewAdminAddress('');
+      // Notify parent to re-check admin status
+      if (onAdminChanged) {
+        onAdminChanged();
+      }
+    } catch (error: any) {
+      console.error('Failed to change admin:', error);
+      alert(`Failed to change admin: ${error.message || error}`);
+    } finally {
+      setIsChangingAdmin(false);
     }
   };
 
@@ -220,7 +254,102 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       <p style={{ marginTop: '12px', fontSize: '12px', color: '#666' }}>
         Click on map to toggle countries
       </p>
+      <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #eee' }}>
+        <button
+          className="primary-button"
+          onClick={() => setShowChangeAdminOverlay(true)}
+          disabled={isLoading}
+          style={{ 
+            width: '100%', 
+            backgroundColor: '#d32f2f', 
+            color: '#fff',
+            fontSize: '12px',
+            padding: '8px 16px'
+          }}
+        >
+          Transfer Admin Rights
+        </button>
+        <p style={{ marginTop: '8px', fontSize: '11px', color: '#999', textAlign: 'center' }}>
+          ⚠️ This will remove your admin access
+        </p>
+      </div>
         </>
+      )}
+
+      {/* Change Admin Overlay */}
+      {showChangeAdminOverlay && (
+        <div 
+          className="marker-popup-overlay" 
+          onClick={() => !isChangingAdmin && setShowChangeAdminOverlay(false)}
+          style={{ zIndex: 3000 }}
+        >
+          <div className="marker-popup" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <button 
+              className="marker-popup-close" 
+              onClick={() => !isChangingAdmin && setShowChangeAdminOverlay(false)}
+              disabled={isChangingAdmin}
+            >
+              ×
+            </button>
+            <h3>Transfer Admin Rights</h3>
+            <div className="marker-popup-content">
+              <div className="marker-popup-field">
+                <label>Warning:</label>
+                <span style={{ color: '#d32f2f', fontSize: '14px' }}>
+                  Transferring admin rights will remove your admin access. You will need to reconnect with the new admin account to regain access.
+                </span>
+              </div>
+              <div className="marker-popup-field">
+                <label>New Admin Address:</label>
+                <input
+                  type="text"
+                  value={newAdminAddress}
+                  onChange={(e) => setNewAdminAddress(e.target.value)}
+                  placeholder="GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                  disabled={isChangingAdmin}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    fontSize: '12px',
+                    fontFamily: 'Courier New, monospace',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    marginTop: '4px'
+                  }}
+                />
+                <small style={{ color: '#666', fontSize: '10px', marginTop: '4px', display: 'block' }}>
+                  Enter the Stellar address (56 characters, starting with G) of the new admin
+                </small>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                <button
+                  className="primary-button"
+                  onClick={handleChangeAdmin}
+                  disabled={isChangingAdmin || !newAdminAddress}
+                  style={{ 
+                    flex: 1,
+                    backgroundColor: '#d32f2f',
+                    color: '#fff'
+                  }}
+                >
+                  {isChangingAdmin ? 'Transferring...' : 'Confirm Transfer'}
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => setShowChangeAdminOverlay(false)}
+                  disabled={isChangingAdmin}
+                  style={{ 
+                    flex: 1,
+                    backgroundColor: '#666',
+                    color: '#fff'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

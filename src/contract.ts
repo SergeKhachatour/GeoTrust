@@ -90,6 +90,11 @@ export class ContractClient {
     }
   }
 
+  async setAdmin(newAdmin: string): Promise<void> {
+    console.log('[ContractClient] Setting new admin:', newAdmin);
+    await this.call('set_admin', newAdmin);
+  }
+
   async getSession(sessionId: number): Promise<any> {
     console.log('[ContractClient] Getting session:', sessionId);
     try {
