@@ -457,6 +457,8 @@ const App: React.FC = () => {
     state: string;
     p1CellId?: number;
     p2CellId?: number;
+    p1Country?: number;
+    p2Country?: number;
   }>) => {
     if (!map.current) return;
     
@@ -474,14 +476,20 @@ const App: React.FC = () => {
         
         const el = document.createElement('div');
         el.className = 'marker marker-opponent session-user-marker';
-        el.innerHTML = `<div class="marker-label">👤</div>`;
+        const publicKeyShort = `${session.player1.slice(0, 4)}...${session.player1.slice(-4)}`;
+        el.innerHTML = `<div class="marker-label">👤<div class="marker-public-key">${publicKeyShort}</div></div>`;
         el.style.cursor = 'pointer';
-        el.title = `Player in Session #${session.sessionId}`;
+        el.title = `${session.player1} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (!wallet) {
-            alert('Connect your wallet to join this session!');
-          }
+          setSelectedMarker({
+            type: 'opponent',
+            location: [lng, lat],
+            publicKey: session.player1!,
+            sessionId: session.sessionId,
+            cellId: session.p1CellId,
+            country: session.p1Country,
+          });
         });
         
         try {
@@ -499,14 +507,20 @@ const App: React.FC = () => {
         
         const el = document.createElement('div');
         el.className = 'marker marker-opponent session-user-marker';
-        el.innerHTML = `<div class="marker-label">👤</div>`;
+        const publicKeyShort = `${session.player2.slice(0, 4)}...${session.player2.slice(-4)}`;
+        el.innerHTML = `<div class="marker-label">👤<div class="marker-public-key">${publicKeyShort}</div></div>`;
         el.style.cursor = 'pointer';
-        el.title = `Player in Session #${session.sessionId}`;
+        el.title = `${session.player2} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (!wallet) {
-            alert('Connect your wallet to join this session!');
-          }
+          setSelectedMarker({
+            type: 'opponent',
+            location: [lng, lat],
+            publicKey: session.player2!,
+            sessionId: session.sessionId,
+            cellId: session.p2CellId,
+            country: session.p2Country,
+          });
         });
         
         try {
@@ -518,7 +532,7 @@ const App: React.FC = () => {
         }
       }
     });
-  }, [wallet]);
+  }, []);
   
   // Fetch active sessions (poll recent session IDs)
   const fetchActiveSessions = useCallback(async () => {
@@ -814,7 +828,8 @@ const App: React.FC = () => {
                   element: createMarkerElement('player', () => {
                     setSelectedMarker({
                       type: 'player',
-                      location: [longitude, latitude]
+                      location: [longitude, latitude],
+                      publicKey: walletAddress || undefined
                     });
                   })
                 })
@@ -1334,7 +1349,11 @@ const App: React.FC = () => {
     type: 'player' | 'opponent';
     location: [number, number];
     userId?: string;
+    publicKey?: string;
     distance?: number;
+    sessionId?: number;
+    cellId?: number;
+    country?: number;
   } | null>(null);
 
   const createMarkerElement = (type: 'player' | 'opponent', onClick?: () => void): HTMLElement => {
@@ -1637,8 +1656,8 @@ const App: React.FC = () => {
                   </CollapsiblePanel>
                 )}
                 
-                {/* Show other active sessions */}
-                {activeSessions.length > 0 && (
+                {/* Show other active sessions - always show all sessions except user's current one */}
+                {activeSessions.filter(s => s.sessionId !== userCurrentSession).length > 0 && (
                   <CollapsiblePanel
                     title={userCurrentSession !== null ? 'Other Sessions' : 'Active Sessions'}
                     minimized={otherSessionsMinimized}
@@ -1718,6 +1737,27 @@ const App: React.FC = () => {
             <button className="marker-popup-close" onClick={() => setSelectedMarker(null)}>×</button>
             <h3>{selectedMarker.type === 'player' ? 'Your Profile' : 'Player Profile'}</h3>
             <div className="marker-popup-content">
+              {selectedMarker.publicKey && (
+                <div className="marker-popup-field">
+                  <label>Public Key:</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span className="marker-popup-id" style={{ fontFamily: 'Courier New', fontSize: '12px', wordBreak: 'break-all' }}>
+                      {selectedMarker.publicKey}
+                    </span>
+                    <button
+                      className="icon-button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedMarker.publicKey!);
+                        alert('Public key copied to clipboard!');
+                      }}
+                      title="Copy Public Key"
+                      style={{ fontSize: '12px', padding: '4px 8px', flexShrink: 0 }}
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="marker-popup-field">
                 <label>Location:</label>
                 <span>{selectedMarker.location[1].toFixed(4)}, {selectedMarker.location[0].toFixed(4)}</span>
@@ -1726,6 +1766,24 @@ const App: React.FC = () => {
                 <div className="marker-popup-field">
                   <label>Distance:</label>
                   <span>{selectedMarker.distance.toFixed(1)} km</span>
+                </div>
+              )}
+              {selectedMarker.sessionId && (
+                <div className="marker-popup-field">
+                  <label>Session ID:</label>
+                  <span>#{selectedMarker.sessionId}</span>
+                </div>
+              )}
+              {selectedMarker.cellId && (
+                <div className="marker-popup-field">
+                  <label>Cell ID:</label>
+                  <span>{selectedMarker.cellId}</span>
+                </div>
+              )}
+              {selectedMarker.country && (
+                <div className="marker-popup-field">
+                  <label>Country Code:</label>
+                  <span>{selectedMarker.country}</span>
                 </div>
               )}
               {selectedMarker.userId && (
@@ -1738,6 +1796,18 @@ const App: React.FC = () => {
                 <div className="marker-popup-field">
                   <label>Status:</label>
                   <span className="marker-popup-status">Active</span>
+                </div>
+              )}
+              {selectedMarker.publicKey && (
+                <div className="marker-popup-field" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+                  <a
+                    href={`https://stellar.expert/explorer/testnet/account/${selectedMarker.publicKey}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#FFD700', textDecoration: 'none', fontWeight: 600 }}
+                  >
+                    View on Stellar Explorer →
+                  </a>
                 </div>
               )}
             </div>
