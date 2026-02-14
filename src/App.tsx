@@ -925,33 +925,47 @@ const App: React.FC = () => {
   }, [wallet, contractClient]);
 
   // Auto-checkin when wallet and contract client are ready
+  // But only if user is not already in a session and there's no pending session join
   const hasCheckedIn = useRef(false);
   useEffect(() => {
-    if (wallet && contractClient && !playerLocation && !isCheckingIn && !hasCheckedIn.current) {
-      hasCheckedIn.current = true;
-      autoCheckIn();
+    if (wallet && contractClient && !playerLocation && !isCheckingIn && !hasCheckedIn.current && 
+        userCurrentSession === null && pendingSessionJoin === null) {
+      // Wait a bit for active sessions to load before auto-checkin
+      const timer = setTimeout(() => {
+        if (userCurrentSession === null && pendingSessionJoin === null) {
+          hasCheckedIn.current = true;
+          autoCheckIn();
+        }
+      }, 2000);
+      return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallet, contractClient]);
+  }, [wallet, contractClient, userCurrentSession, pendingSessionJoin]);
 
   // Handle pending session join from URL parameter
+  // Wait for wallet to be fully connected before attempting to join
   useEffect(() => {
-    if (pendingSessionJoin && wallet && contractClient && !isCheckingIn) {
+    if (pendingSessionJoin && wallet && contractClient && walletAddress && !isCheckingIn) {
       const joinPendingSession = async () => {
         try {
           console.log('[App] Auto-joining session from URL:', pendingSessionJoin);
+          // Small delay to ensure everything is ready
+          await new Promise(resolve => setTimeout(resolve, 500));
           await handleJoinSession(pendingSessionJoin);
           setPendingSessionJoin(null);
         } catch (error: any) {
           console.error('[App] Failed to auto-join session:', error);
-          alert(`Failed to join session ${pendingSessionJoin}: ${error.message || error}`);
+          // Don't show alert if user rejected - that's expected
+          if (!error.message?.includes('rejected') && !error.message?.includes('denied')) {
+            alert(`Failed to join session ${pendingSessionJoin}: ${error.message || error}`);
+          }
           setPendingSessionJoin(null);
         }
       };
       joinPendingSession();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingSessionJoin, wallet, contractClient]);
+  }, [pendingSessionJoin, wallet, contractClient, walletAddress]);
 
 
   const connectWallet = async () => {

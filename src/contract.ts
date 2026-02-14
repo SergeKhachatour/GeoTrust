@@ -100,11 +100,60 @@ export class ContractClient {
     try {
       const result = await this.call('get_session', sessionId);
       console.log('[ContractClient] Session data:', JSON.stringify(result, null, 2));
-      if (result) {
-        console.log('[ContractClient] Session state:', result.state);
-        console.log('[ContractClient] Player1:', result.player1);
-        console.log('[ContractClient] Player2:', result.player2);
+      
+      // The contract returns a Session struct, which is converted to a Map with symbol keys
+      // The scValToJs method should now properly convert symbol keys to strings
+      // Extract fields from the parsed result
+      if (result && typeof result === 'object') {
+        const session: any = {};
+        
+        // Session struct fields: player1, player2, p1_cell_id, p2_cell_id, 
+        // p1_asset_tag, p2_asset_tag, state, created_ledger, p1_country, p2_country
+        // Check if result has the fields directly (already parsed by scValToJs with symbol key support)
+        if (result.player1 !== undefined && result.player1 !== null) {
+          session.player1 = result.player1;
+        }
+        if (result.player2 !== undefined && result.player2 !== null) {
+          session.player2 = result.player2;
+        }
+        if (result.state !== undefined) {
+          // State might be a symbol string like "Waiting", "Active", "Ended"
+          session.state = result.state;
+        }
+        if (result.p1_cell_id !== undefined) {
+          session.p1CellId = result.p1_cell_id;
+          session.p1_cell_id = result.p1_cell_id;
+        }
+        if (result.p2_cell_id !== undefined) {
+          session.p2CellId = result.p2_cell_id;
+          session.p2_cell_id = result.p2_cell_id;
+        }
+        if (result.p1_country !== undefined) {
+          session.p1Country = result.p1_country;
+          session.p1_country = result.p1_country;
+        }
+        if (result.p2_country !== undefined) {
+          session.p2Country = result.p2_country;
+          session.p2_country = result.p2_country;
+        }
+        if (result.created_ledger !== undefined) {
+          session.createdLedger = result.created_ledger;
+          session.created_ledger = result.created_ledger;
+        }
+        
+        // If we got some fields, return the parsed session
+        if (Object.keys(session).length > 0) {
+          console.log('[ContractClient] Parsed session:', session);
+          console.log('[ContractClient] Session state:', session.state);
+          console.log('[ContractClient] Player1:', session.player1);
+          console.log('[ContractClient] Player2:', session.player2);
+          return session;
+        }
+        
+        // Fallback: return result as-is if parsing failed
+        return result;
       }
+      
       return result;
     } catch (error) {
       console.error('[ContractClient] Failed to get session:', error);
@@ -620,8 +669,19 @@ export class ContractClient {
       case xdr.ScValType.scvMap():
         const map: any = {};
         scVal.map()?.forEach((entry) => {
-          const key = this.scValToJs(entry.key());
+          const keyScVal = entry.key();
           const val = this.scValToJs(entry.val());
+          
+          // Handle symbol keys (struct field names)
+          let key: string;
+          if (keyScVal.switch() === xdr.ScValType.scvSymbol()) {
+            // Symbol keys are used for struct fields
+            const symbol = keyScVal.sym();
+            key = symbol.toString();
+          } else {
+            key = String(this.scValToJs(keyScVal));
+          }
+          
           map[key] = val;
         });
         return map;
