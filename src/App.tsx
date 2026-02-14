@@ -23,8 +23,6 @@ if (mapboxToken) {
 // Trustline Comparison Component
 const TrustlineComparison: React.FC<{ myPublicKey: string; theirPublicKey: string }> = ({ myPublicKey, theirPublicKey }) => {
   const [loading, setLoading] = useState(true);
-  const [myTrustlines, setMyTrustlines] = useState<Array<{ asset: string; balance: string }>>([]);
-  const [theirTrustlines, setTheirTrustlines] = useState<Array<{ asset: string; balance: string }>>([]);
   const [commonAssets, setCommonAssets] = useState<Array<{ asset: string; myBalance: string; theirBalance: string }>>([]);
   const [onlyMyAssets, setOnlyMyAssets] = useState<Array<{ asset: string; balance: string }>>([]);
   const [onlyTheirAssets, setOnlyTheirAssets] = useState<Array<{ asset: string; balance: string }>>([]);
@@ -56,8 +54,7 @@ const TrustlineComparison: React.FC<{ myPublicKey: string; theirPublicKey: strin
             balance: b.balance
           }));
 
-        setMyTrustlines(myTls);
-        setTheirTrustlines(theirTls);
+        // Process trustlines to find differences
 
         // Find common assets
         const myAssetMap = new Map(myTls.map(tl => [tl.asset, tl.balance]));
@@ -871,11 +868,13 @@ const App: React.FC = () => {
           // First try silently, if that fails, the wallet will need to reconnect
           try {
             const address = await w.getPublicKey(true); // Try silently first
-            setWallet(w);
-            setWalletAddress(address);
-            const client = new ContractClient(w);
-            setContractClient(client);
-            console.log('[App] Wallet restored successfully:', address);
+            if (address) {
+              setWallet(w);
+              setWalletAddress(address);
+              const client = new ContractClient(w);
+              setContractClient(client);
+              console.log('[App] Wallet restored successfully:', address);
+            }
           } catch (error: any) {
             // If silent restore fails, user will need to reconnect manually
             console.log('[App] Silent wallet restore failed, user will need to reconnect:', error);
@@ -885,11 +884,6 @@ const App: React.FC = () => {
               localStorage.removeItem('geotrust_wallet_address');
             }
           }
-          setWallet(w);
-          setWalletAddress(address);
-          const client = new ContractClient(w);
-          setContractClient(client);
-          console.log('[App] Wallet restored successfully:', address);
           // Admin check will happen automatically via useEffect when wallet and client are set
         } catch (error: any) {
           console.log('Failed to restore wallet connection:', error);
