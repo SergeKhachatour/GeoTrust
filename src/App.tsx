@@ -20,7 +20,153 @@ if (mapboxToken) {
   console.error('[App] Mapbox token not found! Please set REACT_APP_MAPBOX_TOKEN in .env.local');
 }
 
-// Removed unused interface
+// Trustline Comparison Component
+const TrustlineComparison: React.FC<{ myPublicKey: string; theirPublicKey: string }> = ({ myPublicKey, theirPublicKey }) => {
+  const [loading, setLoading] = useState(true);
+  const [myTrustlines, setMyTrustlines] = useState<Array<{ asset: string; balance: string }>>([]);
+  const [theirTrustlines, setTheirTrustlines] = useState<Array<{ asset: string; balance: string }>>([]);
+  const [commonAssets, setCommonAssets] = useState<Array<{ asset: string; myBalance: string; theirBalance: string }>>([]);
+  const [onlyMyAssets, setOnlyMyAssets] = useState<Array<{ asset: string; balance: string }>>([]);
+  const [onlyTheirAssets, setOnlyTheirAssets] = useState<Array<{ asset: string; balance: string }>>([]);
+
+  useEffect(() => {
+    const fetchTrustlines = async () => {
+      setLoading(true);
+      try {
+        const server = new Horizon.Server('https://horizon-testnet.stellar.org');
+        
+        // Fetch both accounts' trustlines
+        const [myAccount, theirAccount] = await Promise.all([
+          server.loadAccount(myPublicKey),
+          server.loadAccount(theirPublicKey)
+        ]);
+
+        // Extract trustlines (non-native balances)
+        const myTls = myAccount.balances
+          .filter((b: any) => b.asset_type !== 'native')
+          .map((b: any) => ({
+            asset: `${b.asset_code}:${b.asset_issuer}`,
+            balance: b.balance
+          }));
+        
+        const theirTls = theirAccount.balances
+          .filter((b: any) => b.asset_type !== 'native')
+          .map((b: any) => ({
+            asset: `${b.asset_code}:${b.asset_issuer}`,
+            balance: b.balance
+          }));
+
+        setMyTrustlines(myTls);
+        setTheirTrustlines(theirTls);
+
+        // Find common assets
+        const myAssetMap = new Map(myTls.map(tl => [tl.asset, tl.balance]));
+        const theirAssetMap = new Map(theirTls.map(tl => [tl.asset, tl.balance]));
+        
+        const common: Array<{ asset: string; myBalance: string; theirBalance: string }> = [];
+        const onlyMine: Array<{ asset: string; balance: string }> = [];
+        const onlyTheirs: Array<{ asset: string; balance: string }> = [];
+
+        myTls.forEach(tl => {
+          if (theirAssetMap.has(tl.asset)) {
+            common.push({
+              asset: tl.asset,
+              myBalance: tl.balance,
+              theirBalance: theirAssetMap.get(tl.asset)!
+            });
+          } else {
+            onlyMine.push(tl);
+          }
+        });
+
+        theirTls.forEach(tl => {
+          if (!myAssetMap.has(tl.asset)) {
+            onlyTheirs.push(tl);
+          }
+        });
+
+        setCommonAssets(common);
+        setOnlyMyAssets(onlyMine);
+        setOnlyTheirAssets(onlyTheirs);
+      } catch (error) {
+        console.error('[TrustlineComparison] Failed to fetch trustlines:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTrustlines();
+  }, [myPublicKey, theirPublicKey]);
+
+  if (loading) {
+    return (
+      <div className="marker-popup-field" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+        <label>Loading Trustlines...</label>
+      </div>
+    );
+  }
+
+  return (
+    <div className="marker-popup-field" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+      <label style={{ fontWeight: 700, marginBottom: '8px' }}>Trustline Comparison</label>
+      
+      {commonAssets.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#666', marginBottom: '4px' }}>
+            Common Assets ({commonAssets.length}):
+          </div>
+          <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '11px' }}>
+            {commonAssets.map((asset, idx) => (
+              <div key={idx} style={{ padding: '4px', backgroundColor: '#f9f9f9', borderRadius: '4px', marginBottom: '4px' }}>
+                <div style={{ fontWeight: 600 }}>{asset.asset.split(':')[0]}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666' }}>
+                  <span>You: {parseFloat(asset.myBalance).toFixed(2)}</span>
+                  <span>Them: {parseFloat(asset.theirBalance).toFixed(2)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {onlyMyAssets.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#666', marginBottom: '4px' }}>
+            Only You Have ({onlyMyAssets.length}):
+          </div>
+          <div style={{ maxHeight: '100px', overflowY: 'auto', fontSize: '11px' }}>
+            {onlyMyAssets.map((asset, idx) => (
+              <div key={idx} style={{ padding: '4px', backgroundColor: '#fff3cd', borderRadius: '4px', marginBottom: '2px' }}>
+                {asset.asset.split(':')[0]} ({parseFloat(asset.balance).toFixed(2)})
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {onlyTheirAssets.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#666', marginBottom: '4px' }}>
+            Only They Have ({onlyTheirAssets.length}):
+          </div>
+          <div style={{ maxHeight: '100px', overflowY: 'auto', fontSize: '11px' }}>
+            {onlyTheirAssets.map((asset, idx) => (
+              <div key={idx} style={{ padding: '4px', backgroundColor: '#d1ecf1', borderRadius: '4px', marginBottom: '2px' }}>
+                {asset.asset.split(':')[0]} ({parseFloat(asset.balance).toFixed(2)})
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {commonAssets.length === 0 && onlyMyAssets.length === 0 && onlyTheirAssets.length === 0 && (
+        <div style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
+          No trustlines found for comparison
+        </div>
+      )}
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -54,6 +200,7 @@ const App: React.FC = () => {
   }>>([]);
   const [accountBalance, setAccountBalance] = useState<string | null>(null);
   const [userCurrentSession, setUserCurrentSession] = useState<number | null>(null);
+  const [pendingSessionJoin, setPendingSessionJoin] = useState<number | null>(null);
   const [gamePanelMinimized, setGamePanelMinimized] = useState(false);
   const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
   const [otherSessionsMinimized, setOtherSessionsMinimized] = useState(false);
@@ -565,9 +712,9 @@ const App: React.FC = () => {
         createdLedger?: number;
       }> = [];
       
-      // Poll sessions 1-50 to find active ones
+      // Poll sessions 1-200 to find active ones
       // In production, you'd want a better way to track sessions
-      for (let sessionId = 1; sessionId <= 50; sessionId++) {
+      for (let sessionId = 1; sessionId <= 200; sessionId++) {
         try {
           const session = await readOnlyClient.getSession(sessionId);
           if (session && (session.state === 'Waiting' || session.state === 'Active')) {
@@ -636,10 +783,10 @@ const App: React.FC = () => {
     if (readOnlyClient) {
       fetchActiveSessions();
       
-      // Poll for active sessions every 10 seconds
+      // Poll for active sessions every 5 seconds for better real-time updates
       const sessionInterval = setInterval(() => {
         fetchActiveSessions();
-      }, 10000);
+      }, 5000);
       
       return () => clearInterval(sessionInterval);
     }
@@ -692,6 +839,11 @@ const App: React.FC = () => {
           if ((session.player1 === publicKey || session.player2 === publicKey) && 
               (session.state === 'Waiting' || session.state === 'Active')) {
             setUserCurrentSession(session.sessionId);
+            // Set session link if found
+            if (session.sessionId) {
+              setSessionLink(`${window.location.origin}?session=${session.sessionId}`);
+            }
+            console.log('[App] User is already in session:', session.sessionId);
             return;
           }
         }
@@ -702,22 +854,37 @@ const App: React.FC = () => {
       }
     };
     
-    if (wallet && activeSessions.length > 0) {
+    if (wallet && activeSessions.length >= 0) { // Check even if no active sessions (to clear state)
       checkUserSession();
     } else if (!wallet) {
       setUserCurrentSession(null);
     }
   }, [wallet, contractClient, activeSessions]);
 
-  // Restore wallet connection on page load
+  // Restore wallet connection on page load and handle session URL parameter
   useEffect(() => {
     const restoreWallet = async () => {
       if (Wallet.wasConnected() && !wallet) {
         try {
           const w = new Wallet();
-          // Try to get public key silently (skipConnect=true) - this won't open modal
-          // If wallet was previously connected, getPublicKey should work without opening modal
-          const address = await w.getPublicKey(true); // Pass true to skip connect
+          // Try to get public key - this will reconnect if needed
+          // First try silently, if that fails, the wallet will need to reconnect
+          try {
+            const address = await w.getPublicKey(true); // Try silently first
+            setWallet(w);
+            setWalletAddress(address);
+            const client = new ContractClient(w);
+            setContractClient(client);
+            console.log('[App] Wallet restored successfully:', address);
+          } catch (error: any) {
+            // If silent restore fails, user will need to reconnect manually
+            console.log('[App] Silent wallet restore failed, user will need to reconnect:', error);
+            // Clear invalid connection state
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('geotrust_wallet_connected');
+              localStorage.removeItem('geotrust_wallet_address');
+            }
+          }
           setWallet(w);
           setWalletAddress(address);
           const client = new ContractClient(w);
@@ -734,6 +901,21 @@ const App: React.FC = () => {
         }
       }
     };
+    
+    // Check for session ID in URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionIdParam = urlParams.get('session');
+    if (sessionIdParam) {
+      const sessionId = parseInt(sessionIdParam, 10);
+      if (!isNaN(sessionId) && sessionId > 0) {
+        console.log('[App] Session ID found in URL:', sessionId);
+        // Store session ID to join after wallet is connected
+        setPendingSessionJoin(sessionId);
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+    
     restoreWallet();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -757,6 +939,25 @@ const App: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet, contractClient]);
+
+  // Handle pending session join from URL parameter
+  useEffect(() => {
+    if (pendingSessionJoin && wallet && contractClient && !isCheckingIn) {
+      const joinPendingSession = async () => {
+        try {
+          console.log('[App] Auto-joining session from URL:', pendingSessionJoin);
+          await handleJoinSession(pendingSessionJoin);
+          setPendingSessionJoin(null);
+        } catch (error: any) {
+          console.error('[App] Failed to auto-join session:', error);
+          alert(`Failed to join session ${pendingSessionJoin}: ${error.message || error}`);
+          setPendingSessionJoin(null);
+        }
+      };
+      joinPendingSession();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSessionJoin, wallet, contractClient]);
 
 
   const connectWallet = async () => {
@@ -809,10 +1010,23 @@ const App: React.FC = () => {
   const autoCheckIn = async () => {
     if (!navigator.geolocation || !contractClient) return;
     
+    // Check if user is already in a session - if so, don't create a new one
+    if (userCurrentSession !== null) {
+      console.log('[App] User is already in session:', userCurrentSession, '- skipping auto-checkin');
+      return;
+    }
+    
     setIsCheckingIn(true);
     try {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
+          // Double-check session state before creating
+          if (userCurrentSession !== null) {
+            console.log('[App] User joined a session while getting location - skipping session creation');
+            setIsCheckingIn(false);
+            return;
+          }
+
           const { latitude, longitude } = position.coords;
           setPlayerLocation([longitude, latitude]);
 
@@ -862,6 +1076,13 @@ const App: React.FC = () => {
           const countryCode = await getCountryCode(longitude, latitude);
           if (countryCode && contractClient) {
             try {
+              // Final check before creating session
+              if (userCurrentSession !== null) {
+                console.log('[App] User joined a session while processing - skipping session creation');
+                setIsCheckingIn(false);
+                return;
+              }
+
               const cellId = calculateCellId(latitude, longitude);
               const assetTag = await getAssetTag();
               console.log('[App] Creating session with:', { cellId, countryCode });
@@ -892,6 +1113,9 @@ const App: React.FC = () => {
                 // }
               );
               setSessionLink(`${window.location.origin}?session=${sessionId}`);
+              
+              // Refresh active sessions to update UI
+              await fetchActiveSessions();
               
               // Fetch other users after checkin
               fetchOtherUsers([longitude, latitude]);
@@ -1893,6 +2117,12 @@ const App: React.FC = () => {
                   <label>Status:</label>
                   <span className="marker-popup-status">Active</span>
                 </div>
+              )}
+              {selectedMarker.publicKey && selectedMarker.type === 'opponent' && walletAddress && (
+                <TrustlineComparison 
+                  myPublicKey={walletAddress}
+                  theirPublicKey={selectedMarker.publicKey}
+                />
               )}
               {selectedMarker.publicKey && (
                 <div className="marker-popup-field" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>

@@ -1,0 +1,1 @@
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\wasm32v1-none\release\geotrust_match.wasm: C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\src\lib.rs
