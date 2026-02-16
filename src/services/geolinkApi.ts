@@ -87,6 +87,13 @@ class GeoLinkApiClient {
       dataConsumerKeyPreview: this.dataConsumerKey ? 
         `${this.dataConsumerKey.substring(0, 4)}...${this.dataConsumerKey.substring(this.dataConsumerKey.length - 4)}` : 
         'NOT SET',
+      // Check raw env vars at module level
+      rawEnvWalletProvider: process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY ? 
+        `${process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY.substring(0, 4)}...${process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY.substring(process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY.length - 4)}` : 
+        'NOT IN ENV',
+      rawEnvDataConsumer: process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY ? 
+        `${process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY.substring(0, 4)}...${process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY.substring(process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY.length - 4)}` : 
+        'NOT IN ENV',
       // Check raw env vars
       envWalletProviderKeyExists: !!process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY,
       envDataConsumerKeyExists: !!process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY,
