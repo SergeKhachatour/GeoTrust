@@ -10,6 +10,7 @@ import { GamePanel } from './GamePanel';
 import { CollapsiblePanel } from './CollapsiblePanel';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 import { Horizon } from '@stellar/stellar-sdk';
+import { geolinkApi, NearbyUser, NearbyNFT, NearbyContract } from './services/geolinkApi';
 
 // Set Mapbox access token
 const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
@@ -181,6 +182,9 @@ const App: React.FC = () => {
   const [showOtherUsers, setShowOtherUsers] = useState(true);
   const [maxDistance, setMaxDistance] = useState(10000); // km
   const [otherUsers, setOtherUsers] = useState<Array<{ id: string; location: [number, number]; distance: number }>>([]);
+  const [nearbyNFTs, setNearbyNFTs] = useState<NearbyNFT[]>([]);
+  const [nearbyContracts, setNearbyContracts] = useState<NearbyContract[]>([]);
+  const [geolinkSessions, setGeolinkSessions] = useState<any[]>([]);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const hasCheckedInRef = useRef(false);
   const [readOnlyClient, setReadOnlyClient] = useState<ReadOnlyContractClient | null>(null);
@@ -788,6 +792,59 @@ const App: React.FC = () => {
       return () => clearInterval(sessionInterval);
     }
   }, [readOnlyClient, fetchActiveSessions]);
+
+  // Fetch GeoLink sessions when wallet is connected
+  useEffect(() => {
+    if (!walletAddress) return;
+    
+    const fetchGeolinkSessions = async () => {
+      try {
+        const sessions = await geolinkApi.getUserSessions(walletAddress);
+        setGeolinkSessions(sessions);
+        console.log('[App] GeoLink sessions:', sessions);
+      } catch (error) {
+        console.warn('[App] Failed to fetch GeoLink sessions:', error);
+      }
+    };
+    
+    fetchGeolinkSessions();
+    const interval = setInterval(fetchGeolinkSessions, 10000); // Every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [walletAddress]);
+
+  // Periodic location update to GeoLink when location is available
+  useEffect(() => {
+    if (!playerLocation || !walletAddress) return;
+    
+    const updateLocationToGeoLink = async () => {
+      try {
+        await geolinkApi.updateLocation({
+          public_key: walletAddress,
+          blockchain: 'stellar',
+          latitude: playerLocation[1],
+          longitude: playerLocation[0],
+          description: 'GeoTrust Match Player',
+        });
+        console.log('[App] Periodic location update to GeoLink');
+      } catch (error) {
+        console.warn('[App] Failed periodic location update:', error);
+      }
+    };
+    
+    // Update immediately, then every 60 seconds
+    updateLocationToGeoLink();
+    const interval = setInterval(updateLocationToGeoLink, 60000);
+    
+    return () => clearInterval(interval);
+  }, [playerLocation, walletAddress]);
+
+  // Fetch nearby users, NFTs, and contracts when location changes
+  useEffect(() => {
+    if (playerLocation && showOtherUsers) {
+      fetchOtherUsers(playerLocation);
+    }
+  }, [playerLocation, showOtherUsers, maxDistance]);
   
   // Fetch account balance when wallet is connected
   useEffect(() => {
@@ -1038,6 +1095,22 @@ const App: React.FC = () => {
           const { latitude, longitude } = position.coords;
           setPlayerLocation([longitude, latitude]);
 
+          // Update location to GeoLink API
+          if (walletAddress) {
+            try {
+              await geolinkApi.updateLocation({
+                public_key: walletAddress,
+                blockchain: 'stellar',
+                latitude,
+                longitude,
+                description: 'GeoTrust Match Player',
+              });
+              console.log('[App] Location updated to GeoLink API');
+            } catch (error) {
+              console.warn('[App] Failed to update location to GeoLink:', error);
+            }
+          }
+
           // Add player marker - ensure map container is ready
           if (map.current) {
             const addPlayerMarker = () => {
@@ -1098,6 +1171,22 @@ const App: React.FC = () => {
               const sessionId = await contractClient.createSession();
               console.log('[App] Session created, ID:', sessionId);
               
+              // Also create session in GeoLink for real-time session management
+              if (walletAddress) {
+                try {
+                  await geolinkApi.createSession({
+                    session_id: sessionId.toString(),
+                    player1: walletAddress,
+                    state: 'waiting',
+                    latitude,
+                    longitude,
+                  });
+                  console.log('[App] Session created in GeoLink');
+                } catch (error) {
+                  console.warn('[App] Failed to create session in GeoLink:', error);
+                }
+              }
+              
               // Additional delay to ensure session is fully persisted and account sequence is refreshed
               // Wait for transaction to be included and then wait a bit more for ledger state to settle
               await new Promise(resolve => setTimeout(resolve, 5000));
@@ -1149,21 +1238,50 @@ const App: React.FC = () => {
   };
 
   const fetchOtherUsers = async (playerLoc: [number, number]) => {
-    // Mock data for now - in production, fetch from contract
-    // For MVP, we'll simulate other users
-    const mockUsers = [
-      { id: 'user1', location: [playerLoc[0] + 0.5, playerLoc[1] + 0.3] as [number, number] },
-      { id: 'user2', location: [playerLoc[0] - 0.8, playerLoc[1] + 0.2] as [number, number] },
-      { id: 'user3', location: [playerLoc[0] + 1.2, playerLoc[1] - 0.5] as [number, number] },
-    ];
-
-    const usersWithDistance = mockUsers.map(user => ({
-      ...user,
-      distance: calculateDistance(playerLoc, user.location),
-    })).filter(user => user.distance <= maxDistance);
-
-    setOtherUsers(usersWithDistance);
-    updateOtherUserMarkers(usersWithDistance);
+    if (!showOtherUsers || !playerLoc) return;
+    
+    try {
+      // Fetch nearby users from GeoLink API
+      const nearbyUsers = await geolinkApi.getNearbyUsers(
+        playerLoc[1], // latitude
+        playerLoc[0], // longitude
+        maxDistance * 1000 // convert km to meters
+      );
+      
+      // Convert to our format
+      const formattedUsers = nearbyUsers.map((user: NearbyUser) => ({
+        id: user.public_key,
+        location: [user.longitude, user.latitude] as [number, number],
+        distance: user.distance / 1000, // convert meters to km
+        publicKey: user.public_key,
+        walletType: user.wallet_type,
+        description: user.description,
+      }));
+      
+      setOtherUsers(formattedUsers);
+      
+      // Also fetch nearby NFTs and contracts
+      const [nfts, contracts] = await Promise.all([
+        geolinkApi.getNearbyNFTs(playerLoc[1], playerLoc[0], maxDistance * 1000),
+        geolinkApi.getNearbyContracts(playerLoc[1], playerLoc[0], maxDistance * 1000),
+      ]);
+      
+      setNearbyNFTs(nfts);
+      setNearbyContracts(contracts);
+      
+      console.log('[App] Fetched from GeoLink:', { 
+        users: formattedUsers.length, 
+        nfts: nfts.length, 
+        contracts: contracts.length 
+      });
+      
+      // Update markers on map
+      updateOtherUserMarkers(formattedUsers);
+    } catch (error) {
+      console.error('[App] Failed to fetch nearby users from GeoLink:', error);
+      // Fallback to empty array on error
+      setOtherUsers([]);
+    }
   };
 
   const calculateDistance = (loc1: [number, number], loc2: [number, number]): number => {
@@ -1421,6 +1539,21 @@ const App: React.FC = () => {
 
   // Handle joining a session
   const handleJoinSession = async (sessionId: number) => {
+    // Also update GeoLink session when joining
+    if (walletAddress && playerLocation) {
+      try {
+        await geolinkApi.createSession({
+          session_id: sessionId.toString(),
+          player1: walletAddress,
+          state: 'waiting',
+          latitude: playerLocation[1],
+          longitude: playerLocation[0],
+        });
+      } catch (error) {
+        console.warn('[App] Failed to update GeoLink session on join:', error);
+      }
+    }
+    
     if (!wallet || !contractClient) {
       alert('Please connect your wallet first to join a session');
       await connectWallet();

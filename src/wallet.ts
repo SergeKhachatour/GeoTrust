@@ -3,6 +3,7 @@ import { Networks } from '@stellar/stellar-sdk';
 
 const WALLET_STORAGE_KEY = 'geotrust_wallet_connected';
 const WALLET_ADDRESS_KEY = 'geotrust_wallet_address';
+const WALLET_TYPE_KEY = 'geotrust_wallet_type'; // Store which wallet was used
 
 // Global kit instance
 let kitInstance: StellarWalletsKit | null = null;
@@ -44,15 +45,19 @@ export class Wallet {
   }
 
   // Save connection state
-  private saveConnectionState(connected: boolean, address?: string): void {
+  private saveConnectionState(connected: boolean, address?: string, walletType?: string): void {
     if (typeof window === 'undefined') return;
     if (connected && address) {
       localStorage.setItem(WALLET_STORAGE_KEY, 'true');
       localStorage.setItem(WALLET_ADDRESS_KEY, address);
+      if (walletType) {
+        localStorage.setItem(WALLET_TYPE_KEY, walletType);
+      }
       this.connectedAddress = address;
     } else {
       localStorage.removeItem(WALLET_STORAGE_KEY);
       localStorage.removeItem(WALLET_ADDRESS_KEY);
+      localStorage.removeItem(WALLET_TYPE_KEY);
       this.connectedAddress = null;
     }
   }
@@ -101,7 +106,7 @@ export class Wallet {
                   return;
                 }
                 
-                this.saveConnectionState(true, address);
+                this.saveConnectionState(true, address, wallet.id);
                 console.log('[Wallet] Connected to wallet:', wallet.name, address);
                 this.isConnecting = false;
                 resolve();
@@ -183,22 +188,43 @@ export class Wallet {
   }
 
   async getPublicKey(skipConnect: boolean = false): Promise<string> {
-    // If we have a cached address and were connected, try to use it
-    // But still verify with the kit
-    if (this.connectedAddress && Wallet.wasConnected()) {
-      try {
-        // Try to get address from kit (this will use the selected wallet)
-        const { address } = await this.kit.getAddress({ skipRequestAccess: true });
-        if (address) {
-          this.connectedAddress = address;
-          return address;
+    // If we have a cached address and were connected, try to restore the wallet connection
+    if (this.connectedAddress && Wallet.wasConnected() && typeof window !== 'undefined') {
+      const savedWalletType = localStorage.getItem(WALLET_TYPE_KEY);
+      
+      // Try to restore the specific wallet if we know which one was used
+      if (savedWalletType) {
+        try {
+          // Set the wallet first
+          this.kit.setWallet(savedWalletType);
+          // Then try to get address
+          const { address } = await this.kit.getAddress({ skipRequestAccess: skipConnect });
+          if (address) {
+            this.connectedAddress = address;
+            this.saveConnectionState(true, address, savedWalletType);
+            return address;
+          }
+        } catch (error) {
+          console.warn('[Wallet] Failed to restore wallet connection, will try full connection:', error);
+          // If restore fails and skipConnect is true, throw error
+          if (skipConnect) {
+            throw new Error('Failed to restore wallet connection');
+          }
         }
-      } catch (error) {
-        // If that fails and we're not skipping connect, fall through to full connection flow
-        if (!skipConnect) {
-          throw new Error('Failed to get cached address');
+      } else {
+        // No wallet type saved, try to get address directly
+        try {
+          const { address } = await this.kit.getAddress({ skipRequestAccess: skipConnect });
+          if (address) {
+            this.connectedAddress = address;
+            return address;
+          }
+        } catch (error) {
+          if (skipConnect) {
+            throw new Error('Failed to get cached address');
+          }
+          console.warn('[Wallet] Failed to get cached address, requesting new connection');
         }
-        console.warn('[Wallet] Failed to get cached address, requesting new connection');
       }
     }
     
