@@ -20,25 +20,43 @@ Go to: **GitHub Repo** → **Settings** → **Secrets and variables** → **Acti
 
 **Name**: `REACT_APP_MAPBOX_TOKEN`
 
-**Value**: `pk.eyJ1Ijoic2VyZ2UzNjl4MzMiLCJhIjoiY20zZHkzb2xoMDA0eTJxcHU4MTNoYjNlaCJ9.Xl6OxzF9td1IgTTeUp526w`
+**Value**: `your_mapbox_token_here`
 
 ### 3. REACT_APP_CONTRACT_ID
 
 **Name**: `REACT_APP_CONTRACT_ID`
 
-**Value**: `CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR`
+**Value**: `your_contract_id_here`
 
 ### 4. REACT_APP_VERIFIER_ID (Optional)
 
 **Name**: `REACT_APP_VERIFIER_ID`
 
-**Value**: `CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC`
+**Value**: `your_verifier_id_here`
 
 ### 5. REACT_APP_GAME_HUB_ID (Optional)
 
 **Name**: `REACT_APP_GAME_HUB_ID`
 
-**Value**: `CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQO6DQ2EMYG`
+**Value**: `your_game_hub_id_here`
+
+### 6. REACT_APP_GEOLINK_API_URL
+
+**Name**: `REACT_APP_GEOLINK_API_URL`
+
+**Value**: `https://testnet.stellargeolink.com`
+
+### 7. REACT_APP_GEOLINK_WALLET_PROVIDER_KEY
+
+**Name**: `REACT_APP_GEOLINK_WALLET_PROVIDER_KEY`
+
+**Value**: `your_wallet_provider_key_here`
+
+### 8. REACT_APP_GEOLINK_DATA_CONSUMER_KEY
+
+**Name**: `REACT_APP_GEOLINK_DATA_CONSUMER_KEY`
+
+**Value**: `your_data_consumer_key_here`
 
 ## After Adding Secrets
 

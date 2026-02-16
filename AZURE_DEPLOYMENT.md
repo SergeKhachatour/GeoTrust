@@ -26,13 +26,25 @@ In Azure Portal, go to your Web App → **Configuration** → **Application sett
 Add these environment variables:
 
 ```
-REACT_APP_MAPBOX_TOKEN=pk.eyJ1Ijoic2VyZ2UzNjl4MzMiLCJhIjoiY20zZHkzb2xoMDA0eTJxcHU4MTNoYjNlaCJ9.Xl6OxzF9td1IgTTeUp526w
-REACT_APP_CONTRACT_ID=CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR
-REACT_APP_VERIFIER_ID=CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC
-REACT_APP_GAME_HUB_ID=CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQO6DQ2EMYG
+REACT_APP_MAPBOX_TOKEN=your_mapbox_token_here
+REACT_APP_CONTRACT_ID=your_contract_id_here
+REACT_APP_VERIFIER_ID=your_verifier_id_here
+REACT_APP_GAME_HUB_ID=your_game_hub_id_here
+
+# GeoLink API Configuration
+REACT_APP_GEOLINK_API_URL=https://testnet.stellargeolink.com
+REACT_APP_GEOLINK_WALLET_PROVIDER_KEY=your_wallet_provider_key_here
+REACT_APP_GEOLINK_DATA_CONSUMER_KEY=your_data_consumer_key_here
 ```
 
 **Important**: These are build-time variables. They must be set in Azure before building.
+
+**How to add in Azure Portal:**
+1. Go to your Web App → **Configuration** → **Application settings**
+2. Click **+ New application setting** for each variable
+3. Enter the **Name** and **Value**
+4. Click **Save** at the top
+5. Azure will restart your app automatically
 
 ## Step 3: Set Up GitHub Secrets (for CI/CD)
 
