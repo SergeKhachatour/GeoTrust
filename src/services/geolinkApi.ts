@@ -80,6 +80,18 @@ class GeoLinkApiClient {
       hasDataConsumerKey: !!this.dataConsumerKey,
       walletProviderKeyLength: this.walletProviderKey?.length || 0,
       dataConsumerKeyLength: this.dataConsumerKey?.length || 0,
+      // Show first 4 chars and last 4 chars for debugging (safe to log)
+      walletProviderKeyPreview: this.walletProviderKey ? 
+        `${this.walletProviderKey.substring(0, 4)}...${this.walletProviderKey.substring(this.walletProviderKey.length - 4)}` : 
+        'NOT SET',
+      dataConsumerKeyPreview: this.dataConsumerKey ? 
+        `${this.dataConsumerKey.substring(0, 4)}...${this.dataConsumerKey.substring(this.dataConsumerKey.length - 4)}` : 
+        'NOT SET',
+      // Check raw env vars
+      envWalletProviderKeyExists: !!process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY,
+      envDataConsumerKeyExists: !!process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY,
+      envWalletProviderKeyLength: process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY?.length || 0,
+      envDataConsumerKeyLength: process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY?.length || 0,
     });
   }
 
