@@ -5,7 +5,8 @@
  */
 
 const GEOLINK_API_BASE = process.env.REACT_APP_GEOLINK_API_URL || 'https://testnet.stellargeolink.com';
-const GEOLINK_API_KEY = process.env.REACT_APP_GEOLINK_API_KEY || '';
+const GEOLINK_WALLET_PROVIDER_KEY = process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY || process.env.REACT_APP_GEOLINK_API_KEY || '';
+const GEOLINK_DATA_CONSUMER_KEY = process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY || process.env.REACT_APP_GEOLINK_API_KEY || '';
 
 export interface LocationUpdate {
   public_key: string;
@@ -63,26 +64,30 @@ export interface SessionData {
 }
 
 class GeoLinkApiClient {
-  private apiKey: string;
+  private walletProviderKey: string;
+  private dataConsumerKey: string;
   private baseUrl: string;
 
-  constructor(apiKey?: string, baseUrl?: string) {
-    this.apiKey = apiKey || GEOLINK_API_KEY;
+  constructor(walletProviderKey?: string, dataConsumerKey?: string, baseUrl?: string) {
+    this.walletProviderKey = walletProviderKey || GEOLINK_WALLET_PROVIDER_KEY;
+    this.dataConsumerKey = dataConsumerKey || GEOLINK_DATA_CONSUMER_KEY;
     this.baseUrl = baseUrl || GEOLINK_API_BASE;
   }
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    useWalletProviderKey: boolean = false
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    const apiKey = useWalletProviderKey ? this.walletProviderKey : this.dataConsumerKey;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {}),
     };
 
-    if (this.apiKey) {
-      headers['X-API-Key'] = this.apiKey;
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
     }
 
     try {
@@ -104,58 +109,71 @@ class GeoLinkApiClient {
   }
 
   /**
-   * Update wallet location
+   * Update wallet location (uses Wallet Provider key)
    */
   async updateLocation(data: LocationUpdate): Promise<any> {
+    console.log('[GeoLinkAPI] Updating location:', {
+      public_key: data.public_key.substring(0, 8) + '...',
+      latitude: data.latitude,
+      longitude: data.longitude,
+    });
+    
     return this.request('/api/location/update', {
       method: 'POST',
       body: JSON.stringify(data),
-    });
+    }, true); // Use wallet provider key
   }
 
   /**
-   * Get nearby wallets/users
+   * Get nearby wallets/users (uses Data Consumer key)
    */
   async getNearbyUsers(
     latitude: number,
     longitude: number,
     radius: number = 10000
   ): Promise<NearbyUser[]> {
+    console.log('[GeoLinkAPI] Fetching nearby users:', { latitude, longitude, radius });
     const response = await this.request<{ nearbyUsers?: NearbyUser[] }>(
-      `/api/location/nearby?lat=${latitude}&lon=${longitude}&radius=${radius}`
+      `/api/location/nearby?lat=${latitude}&lon=${longitude}&radius=${radius}`,
+      {},
+      false // Use data consumer key
     );
     return response.nearbyUsers || [];
   }
 
   /**
-   * Get nearby NFTs
+   * Get nearby NFTs (uses Data Consumer key)
    */
   async getNearbyNFTs(
     latitude: number,
     longitude: number,
     radius: number = 10000
   ): Promise<NearbyNFT[]> {
+    console.log('[GeoLinkAPI] Fetching nearby NFTs:', { latitude, longitude, radius });
     const response = await this.request<{ nfts?: NearbyNFT[] }>(
-      `/api/nft/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`
+      `/api/nft/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`,
+      {},
+      false // Use data consumer key
     );
     return response.nfts || [];
   }
 
   /**
-   * Get nearby smart contract markers
+   * Get nearby smart contract markers (uses Data Consumer key)
    */
   async getNearbyContracts(
     latitude: number,
     longitude: number,
     radius: number = 10000
   ): Promise<NearbyContract[]> {
-    // This might need to be implemented based on GeoLink's contract location API
-    // For now, we'll use the contracts endpoint
+    console.log('[GeoLinkAPI] Fetching nearby contracts:', { latitude, longitude, radius });
     try {
-      const contracts = await this.request<NearbyContract[]>(
-        `/api/contracts?latitude=${latitude}&longitude=${longitude}&radius=${radius}`
+      const response = await this.request<{ contracts?: NearbyContract[] }>(
+        `/api/contracts/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`,
+        {},
+        false // Use data consumer key
       );
-      return contracts || [];
+      return response.contracts || [];
     } catch (error) {
       console.warn('[GeoLinkAPI] Nearby contracts endpoint not available:', error);
       return [];
@@ -163,15 +181,88 @@ class GeoLinkApiClient {
   }
 
   /**
-   * Get wallet location by public key
+   * Get wallet location by public key (uses Data Consumer key)
    */
   async getWalletLocation(publicKey: string): Promise<LocationUpdate | null> {
     try {
-      return await this.request<LocationUpdate>(`/api/location/${publicKey}`);
+      return await this.request<LocationUpdate>(
+        `/api/location/${publicKey}`,
+        {},
+        false // Use data consumer key
+      );
     } catch (error) {
       console.warn(`[GeoLinkAPI] Failed to get location for ${publicKey}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Get wallet location history (uses Wallet Provider key)
+   */
+  async getWalletLocationHistory(publicKey: string): Promise<any[]> {
+    try {
+      const response = await this.request<{ history?: any[] }>(
+        `/api/locations/history?wallet_address=${publicKey}`,
+        {},
+        true // Use wallet provider key
+      );
+      return response.history || [];
+    } catch (error) {
+      console.warn(`[GeoLinkAPI] Failed to get location history for ${publicKey}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Update privacy settings (uses Wallet Provider key)
+   */
+  async updatePrivacySettings(publicKey: string, privacyEnabled: boolean): Promise<any> {
+    if (!this.walletProviderKey) {
+      throw new Error('Wallet Provider API key is not configured');
+    }
+    
+    const privacyLevel = privacyEnabled ? 'public' : 'private';
+    const requestBody = {
+      public_key: publicKey,
+      privacy_level: privacyLevel,
+      location_sharing: privacyEnabled,
+    };
+    
+    console.log('[GeoLinkAPI] Updating privacy settings:', {
+      public_key: publicKey.substring(0, 8) + '...',
+      privacy_level: privacyLevel,
+    });
+    
+    return this.request('/api/wallet-provider/privacy-settings', {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+    }, true); // Use wallet provider key
+  }
+
+  /**
+   * Update visibility settings (uses Wallet Provider key)
+   */
+  async updateVisibilitySettings(publicKey: string, isVisible: boolean): Promise<any> {
+    if (!this.walletProviderKey) {
+      throw new Error('Wallet Provider API key is not configured');
+    }
+    
+    const visibilityLevel = isVisible ? 'public' : 'private';
+    const requestBody = {
+      public_key: publicKey,
+      visibility_level: visibilityLevel,
+      show_location: isVisible,
+    };
+    
+    console.log('[GeoLinkAPI] Updating visibility settings:', {
+      public_key: publicKey.substring(0, 8) + '...',
+      visibility_level: visibilityLevel,
+    });
+    
+    return this.request('/api/wallet-provider/visibility-settings', {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+    }, true); // Use wallet provider key
   }
 
   /**

@@ -32,14 +32,28 @@ Add the following environment variables to `.env.local`:
 ```bash
 # GeoLink API Configuration
 REACT_APP_GEOLINK_API_URL=https://testnet.stellargeolink.com
+
+# Separate keys for Wallet Provider and Data Consumer roles
+# Wallet Provider key is used for location updates and privacy settings
+REACT_APP_GEOLINK_WALLET_PROVIDER_KEY=your_wallet_provider_key_here
+
+# Data Consumer key is used for fetching nearby users, NFTs, and contracts
+REACT_APP_GEOLINK_DATA_CONSUMER_KEY=your_data_consumer_key_here
+
+# Fallback: If separate keys are not provided, a single key will be used for both
 REACT_APP_GEOLINK_API_KEY=your_api_key_here
 ```
 
-### Getting an API Key
+### Getting API Keys
 
-1. Register as a Wallet Provider or Data Consumer on GeoLink
-2. Generate an API key from your dashboard
-3. Add it to your `.env.local` file
+1. Register as a **Wallet Provider** on GeoLink to get location update permissions
+2. Register as a **Data Consumer** on GeoLink to get data access permissions
+3. Generate API keys from your dashboard for each role
+4. Add them to your `.env.local` file
+
+**Note**: Different endpoints require different API keys:
+- **Wallet Provider key**: Used for `/api/location/update`, `/api/wallet-provider/*`
+- **Data Consumer key**: Used for `/api/location/nearby`, `/api/nft/*`, `/api/contracts/*`
 
 ## API Endpoints Used
 
@@ -60,13 +74,20 @@ REACT_APP_GEOLINK_API_KEY=your_api_key_here
 
 ## Future Enhancements
 
+### Privacy & Visibility Settings
+- `updatePrivacySettings()` - Control location sharing privacy
+- `updateVisibilitySettings()` - Control wallet visibility in searches
+- `getWalletLocationHistory()` - Get location history for a wallet
+
 ### Payment Integration
 - Send payments between users via GeoLink API
 - Integration with Stellar payment channels
+- Smart wallet payment execution with WebAuthn support
 
 ### Smart Contract Rules
 - Create location-based smart contract rules via GeoLink API
 - Multi-wallet quorum rules for collaborative transactions
+- Execute contract functions via GeoLink API
 
 ### User Profiles
 - View other user profiles when clicking on markers
