@@ -159,9 +159,15 @@ class GeoLinkApiClient {
       longitude: data.longitude,
     });
     
+    // Match xyz-wallet format: use 'Stellar' (capital S) for blockchain
+    const requestBody = {
+      ...data,
+      blockchain: 'Stellar', // xyz-wallet uses capital S
+    };
+    
     return this.request('/api/location/update', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(requestBody),
     }, true); // Use wallet provider key
   }
 

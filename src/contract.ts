@@ -119,30 +119,60 @@ export class ContractClient {
         if (result.state !== undefined) {
           // State is an enum variant - might be an array with the variant data
           // or already converted to a string
+          console.log('[ContractClient] Raw state value:', JSON.stringify(result.state, null, 2));
+          
           if (Array.isArray(result.state) && result.state.length > 0) {
             // Enum variant wrapped in array - extract the variant value
             const variant = result.state[0];
-            if (variant && variant._value && variant._value.data) {
-              // Convert Buffer data to string (e.g., [87, 97, 105, 116, 105, 110, 103] -> "Waiting")
-              const stateStr = String.fromCharCode(...variant._value.data);
-              session.state = stateStr;
-            } else if (variant && typeof variant === 'string') {
-              session.state = variant;
-            } else if (variant && variant._arm === 'sym' && variant._value) {
-              // Try to extract from _value
-              if (variant._value.data) {
-                session.state = String.fromCharCode(...variant._value.data);
-              } else if (typeof variant._value === 'string') {
-                session.state = variant._value;
+            console.log('[ContractClient] State variant:', JSON.stringify(variant, null, 2));
+            
+            // Try multiple extraction paths
+            let stateStr: string | undefined;
+            
+            // Path 1: variant._value.data (Buffer data)
+            if (variant?._value?.data && Array.isArray(variant._value.data)) {
+              stateStr = String.fromCharCode(...variant._value.data);
+              console.log('[ContractClient] Extracted state from _value.data:', stateStr);
+            }
+            // Path 2: variant._value is a string
+            else if (variant?._value && typeof variant._value === 'string') {
+              stateStr = variant._value;
+              console.log('[ContractClient] Extracted state from _value (string):', stateStr);
+            }
+            // Path 3: variant is a string
+            else if (typeof variant === 'string') {
+              stateStr = variant;
+              console.log('[ContractClient] Extracted state from variant (string):', stateStr);
+            }
+            // Path 4: Check if _value has a different structure
+            else if (variant?._value) {
+              // Try to stringify and parse
+              const valueStr = JSON.stringify(variant._value);
+              if (valueStr.includes('data')) {
+                // Try to extract from JSON
+                try {
+                  const parsed = JSON.parse(valueStr);
+                  if (parsed.data && Array.isArray(parsed.data)) {
+                    stateStr = String.fromCharCode(...parsed.data);
+                    console.log('[ContractClient] Extracted state from parsed _value.data:', stateStr);
+                  }
+                } catch (e) {
+                  // Ignore parse errors
+                }
               }
+            }
+            
+            if (stateStr) {
+              session.state = stateStr;
             } else {
-              session.state = result.state;
+              console.warn('[ContractClient] Could not extract state, using raw value');
+              session.state = result.state as any;
             }
           } else if (typeof result.state === 'string') {
             session.state = result.state;
           } else {
             // Try to extract state from object
-            session.state = result.state;
+            session.state = result.state as any;
           }
         }
         if (result.p1_cell_id !== undefined) {
