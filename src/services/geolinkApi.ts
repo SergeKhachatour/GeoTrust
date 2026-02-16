@@ -72,6 +72,15 @@ class GeoLinkApiClient {
     this.walletProviderKey = walletProviderKey || GEOLINK_WALLET_PROVIDER_KEY;
     this.dataConsumerKey = dataConsumerKey || GEOLINK_DATA_CONSUMER_KEY;
     this.baseUrl = baseUrl || GEOLINK_API_BASE;
+    
+    // Log API configuration (without exposing keys)
+    console.log('[GeoLinkAPI] Initialized:', {
+      baseUrl: this.baseUrl,
+      hasWalletProviderKey: !!this.walletProviderKey,
+      hasDataConsumerKey: !!this.dataConsumerKey,
+      walletProviderKeyLength: this.walletProviderKey?.length || 0,
+      dataConsumerKeyLength: this.dataConsumerKey?.length || 0,
+    });
   }
 
   private async request<T>(
@@ -88,6 +97,8 @@ class GeoLinkApiClient {
 
     if (apiKey) {
       headers['X-API-Key'] = apiKey;
+    } else {
+      console.warn(`[GeoLinkAPI] No API key available for ${endpoint} (useWalletProviderKey: ${useWalletProviderKey})`);
     }
 
     try {
@@ -97,8 +108,26 @@ class GeoLinkApiClient {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `API request failed: ${response.statusText}`);
+        // Try to get error message from response
+        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // If JSON parsing fails, use status text
+        }
+        
+        // Special handling for 401 (Unauthorized)
+        if (response.status === 401) {
+          errorMessage = 'API key required or invalid';
+        }
+        
+        // Special handling for 404 (Not Found)
+        if (response.status === 404) {
+          errorMessage = `Endpoint not found: ${endpoint}`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       return await response.json();
@@ -266,7 +295,8 @@ class GeoLinkApiClient {
   }
 
   /**
-   * Create or update session
+   * Create or update session (uses Wallet Provider key)
+   * Note: Session endpoints may not be available on all GeoLink instances
    */
   async createSession(sessionData: {
     session_id?: string;
@@ -276,18 +306,20 @@ class GeoLinkApiClient {
     latitude?: number;
     longitude?: number;
   }): Promise<SessionData> {
+    // Use wallet provider key for session creation
     return this.request<SessionData>('/api/sessions', {
       method: 'POST',
       body: JSON.stringify(sessionData),
-    });
+    }, true); // Use wallet provider key
   }
 
   /**
-   * Get session by ID
+   * Get session by ID (uses Wallet Provider key)
+   * Note: Session endpoints may not be available on all GeoLink instances
    */
   async getSession(sessionId: string): Promise<SessionData | null> {
     try {
-      return await this.request<SessionData>(`/api/sessions/${sessionId}`);
+      return await this.request<SessionData>(`/api/sessions/${sessionId}`, {}, true);
     } catch (error) {
       console.warn(`[GeoLinkAPI] Failed to get session ${sessionId}:`, error);
       return null;
@@ -295,16 +327,25 @@ class GeoLinkApiClient {
   }
 
   /**
-   * Get active sessions for a user
+   * Get active sessions for a user (uses Wallet Provider key)
+   * Note: Session endpoints may not be available on all GeoLink instances
    */
   async getUserSessions(publicKey: string): Promise<SessionData[]> {
     try {
       const response = await this.request<{ sessions?: SessionData[] }>(
-        `/api/sessions?user=${publicKey}&state=active,waiting`
+        `/api/sessions?user=${publicKey}&state=active,waiting`,
+        {},
+        true // Use wallet provider key
       );
       return response.sessions || [];
     } catch (error) {
-      console.warn(`[GeoLinkAPI] Failed to get sessions for ${publicKey}:`, error);
+      // Silently fail if sessions endpoint doesn't exist (404)
+      // This is expected if GeoLink doesn't have session management
+      if (error instanceof Error && error.message.includes('404')) {
+        console.log(`[GeoLinkAPI] Sessions endpoint not available (expected if GeoLink doesn't support sessions)`);
+      } else {
+        console.warn(`[GeoLinkAPI] Failed to get sessions for ${publicKey}:`, error);
+      }
       return [];
     }
   }
