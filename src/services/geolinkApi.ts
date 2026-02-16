@@ -99,6 +99,8 @@ class GeoLinkApiClient {
       envDataConsumerKeyExists: !!process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY,
       envWalletProviderKeyLength: process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY?.length || 0,
       envDataConsumerKeyLength: process.env.REACT_APP_GEOLINK_DATA_CONSUMER_KEY?.length || 0,
+      // Also check if REACT_APP_GEOLINK_API_URL is set
+      envApiUrl: process.env.REACT_APP_GEOLINK_API_URL || 'NOT SET',
     });
   }
 
