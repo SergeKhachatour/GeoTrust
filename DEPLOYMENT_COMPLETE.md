@@ -3,8 +3,8 @@
 ## Contract IDs (Stellar Testnet)
 
 ### Main Contract (GeoTrust Match)
-**Contract ID:** `CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR`
-**Previous ID:** `CCEOUE46RT6QXZI4OHKWZBOCOKVHIN3SX7OFFGYUQHK3DEY7OOHY22TN` (replaced with Game Hub integration)
+**Contract ID:** `your_contract_id_here`
+**Previous ID:** `previous_contract_id_here` (replaced with Game Hub integration)
 
 **Features:**
 - Session management
@@ -14,7 +14,7 @@
 - ZK proof support
 
 ### ZK Verifier Contract
-**Contract ID:** `CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC`
+**Contract ID:** `your_verifier_id_here`
 
 **Features:**
 - Protocol 25 BN254 pairing verification
@@ -26,9 +26,9 @@
 
 The `.env.local` file has been updated with:
 ```env
-REACT_APP_CONTRACT_ID=CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR
-REACT_APP_VERIFIER_ID=CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC
-REACT_APP_GAME_HUB_ID=CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQO6DQ2EMYG
+REACT_APP_CONTRACT_ID=your_contract_id_here
+REACT_APP_VERIFIER_ID=your_verifier_id_here
+REACT_APP_GAME_HUB_ID=your_game_hub_id_here
 ```
 
 ## Next Steps
@@ -38,7 +38,7 @@ REACT_APP_GAME_HUB_ID=CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQO6DQ2EMYG
 **Initialize Main Contract:**
 ```bash
 soroban contract invoke \
-  --id CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR \
+  --id your_contract_id_here \
   --source YOUR_ADMIN_KEY \
   --network testnet \
   -- \
@@ -50,7 +50,7 @@ soroban contract invoke \
 **Initialize Verifier Contract:**
 ```bash
 soroban contract invoke \
-  --id CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC \
+  --id your_verifier_id_here \
   --source YOUR_ADMIN_KEY \
   --network testnet \
   -- \
@@ -65,23 +65,23 @@ The frontend will automatically set the verifier and Game Hub when you connect a
 **Set Verifier:**
 ```bash
 soroban contract invoke \
-  --id CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR \
+  --id your_contract_id_here \
   --source YOUR_ADMIN_KEY \
   --network testnet \
   -- \
   set_verifier \
-  --verifier CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC
+  --verifier your_verifier_id_here
 ```
 
 **Set Game Hub:**
 ```bash
 soroban contract invoke \
-  --id CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR \
+  --id your_contract_id_here \
   --source YOUR_ADMIN_KEY \
   --network testnet \
   -- \
   set_game_hub \
-  --game_hub CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQO6DQ2EMYG
+  --game_hub your_game_hub_id_here
 ```
 
 ### 3. Set Verification Key (Optional)
@@ -90,7 +90,7 @@ If you have a verification key for your ZK circuit:
 
 ```bash
 soroban contract invoke \
-  --id CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC \
+  --id your_verifier_id_here \
   --source YOUR_ADMIN_KEY \
   --network testnet \
   -- \

@@ -18,10 +18,10 @@ Add these **Application settings**:
 
 | Name | Value |
 |------|-------|
-| `REACT_APP_MAPBOX_TOKEN` | `pk.eyJ1Ijoic2VyZ2UzNjl4MzMiLCJhIjoiY20zZHkzb2xoMDA0eTJxcHU4MTNoYjNlaCJ9.Xl6OxzF9td1IgTTeUp526w` |
-| `REACT_APP_CONTRACT_ID` | `CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR` |
-| `REACT_APP_VERIFIER_ID` | `CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC` |
-| `REACT_APP_GAME_HUB_ID` | `CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQO6DQ2EMYG` |
+| `REACT_APP_MAPBOX_TOKEN` | `your_mapbox_token_here` |
+| `REACT_APP_CONTRACT_ID` | `your_contract_id_here` |
+| `REACT_APP_VERIFIER_ID` | `your_verifier_id_here` |
+| `REACT_APP_GAME_HUB_ID` | `your_game_hub_id_here` |
 
 **Important**: Click **Save** after adding all variables, then **Restart** the app.
 
@@ -36,16 +36,16 @@ Add these secrets:
    - This is the XML you just downloaded
 
 2. **`REACT_APP_MAPBOX_TOKEN`**
-   - Value: `pk.eyJ1Ijoic2VyZ2UzNjl4MzMiLCJhIjoiY20zZHkzb2xoMDA0eTJxcHU4MTNoYjNlaCJ9.Xl6OxzF9td1IgTTeUp526w`
+   - Value: `your_mapbox_token_here`
 
 3. **`REACT_APP_CONTRACT_ID`**
-   - Value: `CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR`
+   - Value: `your_contract_id_here`
 
 4. **`REACT_APP_VERIFIER_ID`** (optional)
-   - Value: `CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC`
+   - Value: `your_verifier_id_here`
 
 5. **`REACT_APP_GAME_HUB_ID`** (optional)
-   - Value: `CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQO6DQ2EMYG`
+   - Value: `your_game_hub_id_here`
 
 **Note**: The publish profile XML should start with `<publishData>` and end with `</publishData>`.
 

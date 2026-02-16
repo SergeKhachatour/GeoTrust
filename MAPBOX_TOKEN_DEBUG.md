@@ -11,7 +11,7 @@ React environment variables are **build-time** - they get baked into the JavaScr
 ### Step 1: Check Your Local Token
 Check your `.env.local` file (or wherever you have the token locally):
 ```
-REACT_APP_MAPBOX_TOKEN=pk.eyJ1Ijoic2VyZ2UzNjl4MzMiLCJhIjoiY20zZHkzb2xoMDA0eTJxcHU4MTNoYjNlaCJ9.Xl6OxzF9td1IgTTeUp526w
+REACT_APP_MAPBOX_TOKEN=your_mapbox_token_here
 ```
 
 ### Step 2: Verify GitHub Secret

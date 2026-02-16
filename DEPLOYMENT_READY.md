@@ -78,7 +78,7 @@ After deployment, update `.env.local` with:
 
 ```env
 # Mapbox Configuration
-REACT_APP_MAPBOX_TOKEN=pk.eyJ1Ijoic2VyZ2UzNjl4MzMiLCJhIjoiY20zZHkzb2xoMDA0eTJxcHU4MTNoYjNlaCJ9.Xl6OxzF9td1IgTTeUp526w
+REACT_APP_MAPBOX_TOKEN=your_mapbox_token_here
 
 # Contract IDs (update after deployment)
 REACT_APP_CONTRACT_ID=YOUR_MAIN_CONTRACT_ID

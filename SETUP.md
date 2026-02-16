@@ -5,7 +5,7 @@
 Create a `.env.local` file in the root directory with:
 
 ```
-REACT_APP_MAPBOX_TOKEN=pk.eyJ1Ijoic2VyZ2UzNjl4MzMiLCJhIjoiY20zZHkzb2xoMDA0eTJxcHU4MTNoYjNlaCJ9.Xl6OxzF9td1IgTTeUp526w
+REACT_APP_MAPBOX_TOKEN=your_mapbox_token_here
 REACT_APP_CONTRACT_ID=your_contract_id_here
 ```
 

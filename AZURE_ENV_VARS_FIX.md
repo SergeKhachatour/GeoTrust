@@ -26,10 +26,10 @@ Add/Update these variables:
 
 | Name | Value |
 |------|-------|
-| `REACT_APP_MAPBOX_TOKEN` | `pk.eyJ1Ijoic2VyZ2UzNjl4MzMiLCJhIjoiY20zZHkzb2xoMDA0eTJxcHU4MTNoYjNlaCJ9.Xl6OxzF9td1IgTTeUp526w` |
-| `REACT_APP_CONTRACT_ID` | `CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR` |
-| `REACT_APP_VERIFIER_ID` | `CCG3E6Q53MKZCMYOIRKLRLIQVEK45TDYCCAAPZH32MB4CDN7N5NTLYBC` |
-| `REACT_APP_GAME_HUB_ID` | `CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQO6DQ2EMYG` |
+| `REACT_APP_MAPBOX_TOKEN` | `your_mapbox_token_here` |
+| `REACT_APP_CONTRACT_ID` | `your_contract_id_here` |
+| `REACT_APP_VERIFIER_ID` | `your_verifier_id_here` |
+| `REACT_APP_GAME_HUB_ID` | `your_game_hub_id_here` |
 
 **Important Notes:**
 - These are **build-time** variables for React
