@@ -38,6 +38,9 @@ jobs:
         REACT_APP_CONTRACT_ID: ${{ secrets.REACT_APP_CONTRACT_ID }}
         REACT_APP_VERIFIER_ID: ${{ secrets.REACT_APP_VERIFIER_ID }}
         REACT_APP_GAME_HUB_ID: ${{ secrets.REACT_APP_GAME_HUB_ID }}
+        REACT_APP_GEOLINK_API_URL: ${{ secrets.REACT_APP_GEOLINK_API_URL }}
+        REACT_APP_GEOLINK_WALLET_PROVIDER_KEY: ${{ secrets.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY }}
+        REACT_APP_GEOLINK_DATA_CONSUMER_KEY: ${{ secrets.REACT_APP_GEOLINK_DATA_CONSUMER_KEY }}
 
     - name: Wait for any ongoing deployments to complete
       run: |
