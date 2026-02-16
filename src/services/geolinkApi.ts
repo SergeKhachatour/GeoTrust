@@ -189,12 +189,24 @@ class GeoLinkApiClient {
     radius: number = 10000
   ): Promise<NearbyUser[]> {
     console.log('[GeoLinkAPI] Fetching nearby users:', { latitude, longitude, radius });
-    const response = await this.request<{ nearbyUsers?: NearbyUser[] }>(
-      `/api/location/nearby?lat=${latitude}&lon=${longitude}&radius=${radius}`,
-      {},
-      false // Use data consumer key
-    );
-    return response.nearbyUsers || [];
+    // Match xyz-wallet pattern: use latitude/longitude parameter names
+    // Note: GeoLink may not have a nearby users endpoint - this might need to be removed
+    // or use a different endpoint like /api/wallets/nearby
+    try {
+      const response = await this.request<{ nearbyUsers?: NearbyUser[]; users?: NearbyUser[] }>(
+        `/api/location/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`,
+        {},
+        false // Use data consumer key
+      );
+      return response.nearbyUsers || response.users || [];
+    } catch (error: any) {
+      // If endpoint doesn't exist (404), return empty array
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        console.warn('[GeoLinkAPI] Nearby users endpoint not available, returning empty array');
+        return [];
+      }
+      throw error;
+    }
   }
 
   /**
