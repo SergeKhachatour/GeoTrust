@@ -1767,6 +1767,12 @@ const App: React.FC = () => {
           {wallet && walletAddress && (
             <div className="wallet-status" style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Stellar Logo */}
+                <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.9 }}>
+                  <circle cx="16" cy="16" r="14" stroke="#7D00FF" strokeWidth="2" fill="none"/>
+                  <line x1="16" y1="2" x2="16" y2="30" stroke="#7D00FF" strokeWidth="2" strokeLinecap="round"/>
+                  <line x1="2" y1="16" x2="30" y2="16" stroke="#7D00FF" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
                 <span className="wallet-address" style={{ fontFamily: 'Courier New', fontSize: '12px' }}>
                   {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
                 </span>
@@ -1851,6 +1857,14 @@ const App: React.FC = () => {
               </div>
             ) : !wallet ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Stellar Logo */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
+                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.8 }}>
+                    <circle cx="16" cy="16" r="14" stroke="#7D00FF" strokeWidth="2" fill="none"/>
+                    <line x1="16" y1="2" x2="16" y2="30" stroke="#7D00FF" strokeWidth="2" strokeLinecap="round"/>
+                    <line x1="2" y1="16" x2="30" y2="16" stroke="#7D00FF" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </div>
                 <button className="primary-button" onClick={connectWallet} style={{ width: '100%' }}>
                   {isCheckingIn ? (
                     <>
