@@ -239,33 +239,81 @@ export class ContractClient {
     country: number,
     locationProof?: { proof: Uint8Array; publicInputs: number[] }
   ): Promise<void> {
-    // First, verify the session exists before trying to join
+    // First, verify the session exists and validate preconditions
     // Use read-only getSession which doesn't affect sequence number
     try {
       const session = await this.getSession(sessionId);
       if (!session) {
         throw new Error(`Session ${sessionId} not found. Please create a session first.`);
       }
-      console.log('[ContractClient] Session exists, proceeding to join:', session);
+      
+      // Validate session state
+      const sessionState = session.state;
+      if (sessionState !== 'Waiting') {
+        throw new Error(`Session ${sessionId} is not in Waiting state. Current state: ${sessionState}`);
+      }
+      
+      // Check if player is already in session
+      const callerStr = await this.wallet.getPublicKey();
+      if (session.player1 === callerStr || session.player2 === callerStr) {
+        throw new Error(`You are already in session ${sessionId}`);
+      }
+      
+      // Check if session is full
+      if (session.player1 && session.player2) {
+        throw new Error(`Session ${sessionId} is full`);
+      }
+      
+      // Check if country is allowed (read-only check)
+      try {
+        const countryAllowed = await this.call('get_country_allowed', country);
+        if (countryAllowed === null || countryAllowed === false) {
+          // If explicit check fails, check the policy
+          const policy = await this.call('get_country_policy');
+          const [defaultAllowAll] = policy as [boolean, number, number];
+          if (!defaultAllowAll) {
+            throw new Error(`Country ${country} is not allowed. Please check the country policy.`);
+          }
+        }
+      } catch (error) {
+        // If get_country_allowed fails, we'll let the contract handle it
+        console.warn('[ContractClient] Could not verify country policy, contract will validate:', error);
+      }
+      
+      console.log('[ContractClient] Session validated, proceeding to join:', {
+        sessionId,
+        state: sessionState,
+        player1: session.player1 || 'None',
+        player2: session.player2 || 'None',
+        caller: callerStr,
+      });
     } catch (error) {
-      console.error('[ContractClient] Error checking session before join:', error);
-      throw new Error(`Cannot join session ${sessionId}: ${error instanceof Error ? error.message : 'Session not found'}`);
+      console.error('[ContractClient] Error validating session before join:', error);
+      throw error instanceof Error ? error : new Error(`Cannot join session ${sessionId}: ${String(error)}`);
     }
     
     // Add a small delay to ensure account sequence is fresh after createSession
     // This helps prevent txBadSeq errors
     await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Get caller address and convert to ScVal Address
+    const callerStr = await this.wallet.getPublicKey();
+    
     console.log('[ContractClient] Joining session:', {
       sessionId,
       cellId,
       country,
+      caller: callerStr,
       hasProof: !!locationProof,
       assetTagLength: assetTag.length,
-      assetTagHex: Array.from(assetTag.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('') + '...'
+      assetTagHex: Array.from(assetTag.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('') + '...',
+      assetTagIsZero: Array.from(assetTag).every(b => b === 0) ? 'WARNING: All zeros!' : 'OK'
     });
     
-    // Get caller address and convert to ScVal Address
-    const callerStr = await this.wallet.getPublicKey();
+    // Warn if asset tag is all zeros (placeholder)
+    if (Array.from(assetTag).every(b => b === 0)) {
+      console.warn('[ContractClient] WARNING: Asset tag is all zeros (placeholder). This may cause issues.');
+    }
     const callerAddress = new Address(callerStr);
     const callerScVal = xdr.ScVal.scvAddress(callerAddress.toScAddress());
     
