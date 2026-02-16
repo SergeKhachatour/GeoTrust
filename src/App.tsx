@@ -182,8 +182,12 @@ const App: React.FC = () => {
   const [showOtherUsers, setShowOtherUsers] = useState(true);
   const [maxDistance, setMaxDistance] = useState(10000); // km
   const [otherUsers, setOtherUsers] = useState<Array<{ id: string; location: [number, number]; distance: number }>>([]);
+  // Note: nearbyNFTs and nearbyContracts are fetched but not yet displayed in UI
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [nearbyNFTs, setNearbyNFTs] = useState<NearbyNFT[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [nearbyContracts, setNearbyContracts] = useState<NearbyContract[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [geolinkSessions, setGeolinkSessions] = useState<any[]>([]);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const hasCheckedInRef = useRef(false);
@@ -839,12 +843,117 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [playerLocation, walletAddress]);
 
+  // calculateDistance removed - distance is already calculated by GeoLink API
+
+  const updateOtherUserMarkers = useCallback((users: Array<{ id: string; location: [number, number]; distance: number }>) => {
+    if (!map.current) return;
+
+    // Remove existing markers
+    document.querySelectorAll('.other-user-marker').forEach(m => m.remove());
+
+    if (!showOtherUsers) return;
+
+    // Ensure map is loaded and container is ready before adding markers
+    const addMarkers = () => {
+      if (!map.current) return;
+      
+      // Check if map container exists and is in DOM
+      const container = map.current.getContainer();
+      if (!container || !container.parentElement) {
+        console.warn('Map container not ready, retrying...');
+        setTimeout(addMarkers, 100);
+        return;
+      }
+
+      if (!map.current.loaded()) {
+        map.current.once('load', addMarkers);
+        return;
+      }
+
+      users.forEach(user => {
+        const el = document.createElement('div');
+        el.className = 'marker marker-opponent other-user-marker';
+        el.innerHTML = `<div class="marker-distance">${user.distance.toFixed(1)} km</div>`;
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          setSelectedMarker({
+            type: 'opponent',
+            location: user.location,
+            userId: user.id,
+            distance: user.distance,
+            publicKey: (user as any).publicKey,
+          });
+        });
+        
+        try {
+          const marker = new mapboxgl.Marker({ element: el })
+            .setLngLat(user.location)
+            .addTo(map.current!);
+          
+          marker.getElement().setAttribute('data-user-id', user.id);
+        } catch (error) {
+          console.error('[App] Failed to add other-user marker:', error);
+        }
+      });
+    };
+
+    addMarkers();
+  }, [showOtherUsers]);
+
+  const fetchOtherUsers = useCallback(async (playerLoc: [number, number]) => {
+    if (!showOtherUsers || !playerLoc) return;
+    
+    try {
+      // Fetch nearby users from GeoLink API
+      const nearbyUsers = await geolinkApi.getNearbyUsers(
+        playerLoc[1], // latitude
+        playerLoc[0], // longitude
+        maxDistance * 1000 // convert km to meters
+      );
+      
+      // Convert to our format
+      const formattedUsers = nearbyUsers.map((user: NearbyUser) => ({
+        id: user.public_key,
+        location: [user.longitude, user.latitude] as [number, number],
+        distance: user.distance / 1000, // convert meters to km
+        publicKey: user.public_key,
+        walletType: user.wallet_type,
+        description: user.description,
+      }));
+      
+      setOtherUsers(formattedUsers);
+      
+      // Also fetch nearby NFTs and contracts
+      const [nfts, contracts] = await Promise.all([
+        geolinkApi.getNearbyNFTs(playerLoc[1], playerLoc[0], maxDistance * 1000),
+        geolinkApi.getNearbyContracts(playerLoc[1], playerLoc[0], maxDistance * 1000),
+      ]);
+      
+      setNearbyNFTs(nfts);
+      setNearbyContracts(contracts);
+      
+      console.log('[App] Fetched from GeoLink:', { 
+        users: formattedUsers.length, 
+        nfts: nfts.length, 
+        contracts: contracts.length 
+      });
+      
+      // Update markers on map
+      updateOtherUserMarkers(formattedUsers);
+    } catch (error) {
+      console.error('[App] Failed to fetch nearby users from GeoLink:', error);
+      // Fallback to empty array on error
+      setOtherUsers([]);
+    }
+  }, [showOtherUsers, maxDistance, updateOtherUserMarkers]);
+
   // Fetch nearby users, NFTs, and contracts when location changes
   useEffect(() => {
     if (playerLocation && showOtherUsers) {
       fetchOtherUsers(playerLocation);
     }
-  }, [playerLocation, showOtherUsers, maxDistance]);
+  }, [playerLocation, showOtherUsers, fetchOtherUsers]);
   
   // Fetch account balance when wallet is connected
   useEffect(() => {
@@ -1236,135 +1345,6 @@ const App: React.FC = () => {
       setIsCheckingIn(false);
     }
   };
-
-  const fetchOtherUsers = async (playerLoc: [number, number]) => {
-    if (!showOtherUsers || !playerLoc) return;
-    
-    try {
-      // Fetch nearby users from GeoLink API
-      const nearbyUsers = await geolinkApi.getNearbyUsers(
-        playerLoc[1], // latitude
-        playerLoc[0], // longitude
-        maxDistance * 1000 // convert km to meters
-      );
-      
-      // Convert to our format
-      const formattedUsers = nearbyUsers.map((user: NearbyUser) => ({
-        id: user.public_key,
-        location: [user.longitude, user.latitude] as [number, number],
-        distance: user.distance / 1000, // convert meters to km
-        publicKey: user.public_key,
-        walletType: user.wallet_type,
-        description: user.description,
-      }));
-      
-      setOtherUsers(formattedUsers);
-      
-      // Also fetch nearby NFTs and contracts
-      const [nfts, contracts] = await Promise.all([
-        geolinkApi.getNearbyNFTs(playerLoc[1], playerLoc[0], maxDistance * 1000),
-        geolinkApi.getNearbyContracts(playerLoc[1], playerLoc[0], maxDistance * 1000),
-      ]);
-      
-      setNearbyNFTs(nfts);
-      setNearbyContracts(contracts);
-      
-      console.log('[App] Fetched from GeoLink:', { 
-        users: formattedUsers.length, 
-        nfts: nfts.length, 
-        contracts: contracts.length 
-      });
-      
-      // Update markers on map
-      updateOtherUserMarkers(formattedUsers);
-    } catch (error) {
-      console.error('[App] Failed to fetch nearby users from GeoLink:', error);
-      // Fallback to empty array on error
-      setOtherUsers([]);
-    }
-  };
-
-  const calculateDistance = (loc1: [number, number], loc2: [number, number]): number => {
-    const R = 6371; // Earth's radius in km
-    const dLat = (loc2[1] - loc1[1]) * Math.PI / 180;
-    const dLon = (loc2[0] - loc1[0]) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(loc1[1] * Math.PI / 180) * Math.cos(loc2[1] * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  const updateOtherUserMarkers = (users: Array<{ id: string; location: [number, number]; distance: number }>) => {
-    if (!map.current) return;
-
-    // Remove existing markers
-    document.querySelectorAll('.other-user-marker').forEach(m => m.remove());
-
-    if (!showOtherUsers) return;
-
-    // Ensure map is loaded and container is ready before adding markers
-    const addMarkers = () => {
-      if (!map.current) return;
-      
-      // Check if map container exists and is in DOM
-      const container = map.current.getContainer();
-      if (!container || !container.parentElement) {
-        console.warn('Map container not ready, retrying...');
-        setTimeout(addMarkers, 100);
-        return;
-      }
-
-      if (!map.current.loaded()) {
-        map.current.once('load', addMarkers);
-        return;
-      }
-
-      users.forEach(user => {
-        const el = document.createElement('div');
-        el.className = 'marker marker-opponent other-user-marker';
-        el.innerHTML = `<div class="marker-distance">${user.distance.toFixed(1)} km</div>`;
-        el.style.cursor = 'pointer';
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          setSelectedMarker({
-            type: 'opponent',
-            location: user.location,
-            userId: user.id,
-            distance: user.distance
-          });
-        });
-        
-        try {
-          const marker = new mapboxgl.Marker({ element: el })
-            .setLngLat(user.location)
-            .addTo(map.current!);
-          
-          marker.getElement().setAttribute('data-user-id', user.id);
-          console.log('[App] Added other-user marker (NO PUBLIC KEY):', {
-            userId: user.id,
-            location: user.location,
-            distance: user.distance,
-            note: 'This marker has no public key - it is from the distance-based "other users"" feature'
-          });
-        } catch (error) {
-          console.error('[App] Failed to add other-user marker:', error);
-        }
-      });
-    };
-
-    addMarkers();
-  };
-
-  useEffect(() => {
-    if (playerLocation && showOtherUsers) {
-      fetchOtherUsers(playerLocation);
-    } else if (!showOtherUsers) {
-      document.querySelectorAll('.other-user-marker').forEach(m => m.remove());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showOtherUsers, maxDistance]);
 
   const checkAdminStatus = async () => {
     if (!contractClient || !wallet) {
