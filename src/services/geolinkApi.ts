@@ -295,8 +295,9 @@ class GeoLinkApiClient {
   }
 
   /**
-   * Create or update session (uses Wallet Provider key)
-   * Note: Session endpoints may not be available on all GeoLink instances
+   * Create or update session
+   * NOTE: GeoLink doesn't have a sessions endpoint - sessions are managed entirely on-chain in GeoTrust
+   * This method is kept for API compatibility but does nothing
    */
   async createSession(sessionData: {
     session_id?: string;
@@ -306,48 +307,37 @@ class GeoLinkApiClient {
     latitude?: number;
     longitude?: number;
   }): Promise<SessionData> {
-    // Use wallet provider key for session creation
-    return this.request<SessionData>('/api/sessions', {
-      method: 'POST',
-      body: JSON.stringify(sessionData),
-    }, true); // Use wallet provider key
+    // GeoLink doesn't support sessions - return a mock response
+    console.log('[GeoLinkAPI] Sessions are managed on-chain, not in GeoLink');
+    return {
+      session_id: sessionData.session_id || '',
+      player1: sessionData.player1,
+      player2: sessionData.player2,
+      state: sessionData.state,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
   }
 
   /**
-   * Get session by ID (uses Wallet Provider key)
-   * Note: Session endpoints may not be available on all GeoLink instances
+   * Get session by ID
+   * NOTE: GeoLink doesn't have a sessions endpoint - sessions are managed entirely on-chain in GeoTrust
+   * This method is kept for API compatibility but returns null
    */
   async getSession(sessionId: string): Promise<SessionData | null> {
-    try {
-      return await this.request<SessionData>(`/api/sessions/${sessionId}`, {}, true);
-    } catch (error) {
-      console.warn(`[GeoLinkAPI] Failed to get session ${sessionId}:`, error);
-      return null;
-    }
+    console.log('[GeoLinkAPI] Sessions are managed on-chain, not in GeoLink');
+    return null;
   }
 
   /**
-   * Get active sessions for a user (uses Wallet Provider key)
-   * Note: Session endpoints may not be available on all GeoLink instances
+   * Get active sessions for a user
+   * NOTE: GeoLink doesn't have a sessions endpoint - sessions are managed entirely on-chain in GeoTrust
+   * This method is kept for API compatibility but returns empty array
    */
   async getUserSessions(publicKey: string): Promise<SessionData[]> {
-    try {
-      const response = await this.request<{ sessions?: SessionData[] }>(
-        `/api/sessions?user=${publicKey}&state=active,waiting`,
-        {},
-        true // Use wallet provider key
-      );
-      return response.sessions || [];
-    } catch (error) {
-      // Silently fail if sessions endpoint doesn't exist (404)
-      // This is expected if GeoLink doesn't have session management
-      if (error instanceof Error && error.message.includes('404')) {
-        console.log(`[GeoLinkAPI] Sessions endpoint not available (expected if GeoLink doesn't support sessions)`);
-      } else {
-        console.warn(`[GeoLinkAPI] Failed to get sessions for ${publicKey}:`, error);
-      }
-      return [];
-    }
+    // GeoLink doesn't support sessions - return empty array
+    // Sessions are fetched from the on-chain contract instead
+    return [];
   }
 
   /**

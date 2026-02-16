@@ -117,8 +117,33 @@ export class ContractClient {
           session.player2 = result.player2;
         }
         if (result.state !== undefined) {
-          // State might be a symbol string like "Waiting", "Active", "Ended"
-          session.state = result.state;
+          // State is an enum variant - might be an array with the variant data
+          // or already converted to a string
+          if (Array.isArray(result.state) && result.state.length > 0) {
+            // Enum variant wrapped in array - extract the variant value
+            const variant = result.state[0];
+            if (variant && variant._value && variant._value.data) {
+              // Convert Buffer data to string (e.g., [87, 97, 105, 116, 105, 110, 103] -> "Waiting")
+              const stateStr = String.fromCharCode(...variant._value.data);
+              session.state = stateStr;
+            } else if (variant && typeof variant === 'string') {
+              session.state = variant;
+            } else if (variant && variant._arm === 'sym' && variant._value) {
+              // Try to extract from _value
+              if (variant._value.data) {
+                session.state = String.fromCharCode(...variant._value.data);
+              } else if (typeof variant._value === 'string') {
+                session.state = variant._value;
+              }
+            } else {
+              session.state = result.state;
+            }
+          } else if (typeof result.state === 'string') {
+            session.state = result.state;
+          } else {
+            // Try to extract state from object
+            session.state = result.state;
+          }
         }
         if (result.p1_cell_id !== undefined) {
           session.p1CellId = result.p1_cell_id;
@@ -249,7 +274,9 @@ export class ContractClient {
       
       // Validate session state
       const sessionState = session.state;
-      if (sessionState !== 'Waiting') {
+      // Normalize state string (handle case variations)
+      const normalizedState = typeof sessionState === 'string' ? sessionState.toLowerCase() : String(sessionState).toLowerCase();
+      if (normalizedState !== 'waiting') {
         throw new Error(`Session ${sessionId} is not in Waiting state. Current state: ${sessionState}`);
       }
       

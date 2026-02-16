@@ -188,7 +188,7 @@ const App: React.FC = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [nearbyContracts, setNearbyContracts] = useState<NearbyContract[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [geolinkSessions, setGeolinkSessions] = useState<any[]>([]);
+  // Note: Sessions are managed entirely on-chain, not in GeoLink
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const hasCheckedInRef = useRef(false);
   const [readOnlyClient, setReadOnlyClient] = useState<ReadOnlyContractClient | null>(null);
@@ -797,25 +797,7 @@ const App: React.FC = () => {
     }
   }, [readOnlyClient, fetchActiveSessions]);
 
-  // Fetch GeoLink sessions when wallet is connected
-  useEffect(() => {
-    if (!walletAddress) return;
-    
-    const fetchGeolinkSessions = async () => {
-      try {
-        const sessions = await geolinkApi.getUserSessions(walletAddress);
-        setGeolinkSessions(sessions);
-        console.log('[App] GeoLink sessions:', sessions);
-      } catch (error) {
-        console.warn('[App] Failed to fetch GeoLink sessions:', error);
-      }
-    };
-    
-    fetchGeolinkSessions();
-    const interval = setInterval(fetchGeolinkSessions, 10000); // Every 10 seconds
-    
-    return () => clearInterval(interval);
-  }, [walletAddress]);
+  // Note: GeoLink doesn't have a sessions endpoint, so we handle sessions entirely on-chain
 
   // Periodic location update to GeoLink when location is available
   useEffect(() => {
@@ -1280,21 +1262,7 @@ const App: React.FC = () => {
               const sessionId = await contractClient.createSession();
               console.log('[App] Session created, ID:', sessionId);
               
-              // Also create session in GeoLink for real-time session management
-              if (walletAddress) {
-                try {
-                  await geolinkApi.createSession({
-                    session_id: sessionId.toString(),
-                    player1: walletAddress,
-                    state: 'waiting',
-                    latitude,
-                    longitude,
-                  });
-                  console.log('[App] Session created in GeoLink');
-                } catch (error) {
-                  console.warn('[App] Failed to create session in GeoLink:', error);
-                }
-              }
+              // Note: Sessions are managed entirely on-chain, not in GeoLink
               
               // Additional delay to ensure session is fully persisted and account sequence is refreshed
               // Wait for transaction to be included and then wait a bit more for ledger state to settle
@@ -1519,20 +1487,7 @@ const App: React.FC = () => {
 
   // Handle joining a session
   const handleJoinSession = async (sessionId: number) => {
-    // Also update GeoLink session when joining
-    if (walletAddress && playerLocation) {
-      try {
-        await geolinkApi.createSession({
-          session_id: sessionId.toString(),
-          player1: walletAddress,
-          state: 'waiting',
-          latitude: playerLocation[1],
-          longitude: playerLocation[0],
-        });
-      } catch (error) {
-        console.warn('[App] Failed to update GeoLink session on join:', error);
-      }
-    }
+    // Note: Sessions are managed entirely on-chain, not in GeoLink
     
     if (!wallet || !contractClient) {
       alert('Please connect your wallet first to join a session');
