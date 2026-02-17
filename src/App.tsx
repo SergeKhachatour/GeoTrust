@@ -1539,8 +1539,8 @@ const App: React.FC = () => {
       total: nearbyContracts.length,
       added: markersAdded,
       invalidCoords: invalidCoords,
-      mapLoaded: map.current?.loaded(),
-      mapStyleLoaded: map.current?.isStyleLoaded()
+      mapLoaded: map.current ? map.current.loaded() : false,
+      mapStyleLoaded: map.current ? map.current.isStyleLoaded() : false
     });
   }, [nearbyContracts]);
 

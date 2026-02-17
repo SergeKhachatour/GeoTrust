@@ -75,7 +75,8 @@ export class ContractClient {
         // Check if it has a toString method or address property
         if (result.toString && typeof result.toString === 'function') {
           const str = result.toString();
-          if (str && str.length === 56 && str.startsWith('G')) {
+          // Stellar addresses can start with 'G' (account) or 'C' (contract)
+          if (str && str.length === 56 && (str.startsWith('G') || str.startsWith('C'))) {
             return str;
           }
         }
@@ -768,12 +769,12 @@ export class ContractClient {
               if (addrStr === '[object Object]' || !addrStr || addrStr.length !== 56) {
                 // Address might have a value or address property
                 const value = (addrObj as any).value || (addrObj as any).address || (addrObj as any).accountId;
-                if (value && typeof value === 'string' && value.length === 56 && value.startsWith('G')) {
+                if (value && typeof value === 'string' && value.length === 56 && (value.startsWith('G') || value.startsWith('C'))) {
                   addrStr = value;
                 } else {
-                  // Last resort: try to stringify and parse
+                  // Last resort: try to stringify and parse (accept both G and C addresses)
                   const json = JSON.stringify(addrObj);
-                  const match = json.match(/"([G][A-Z0-9]{55})"/);
+                  const match = json.match(/"([GC][A-Z0-9]{55})"/);
                   if (match && match[1]) {
                     addrStr = match[1];
                   } else {
@@ -791,8 +792,8 @@ export class ContractClient {
             }
           }
           
-          // Validate
-          if (addrStr && addrStr.length === 56 && addrStr.startsWith('G')) {
+          // Validate - Stellar addresses can start with 'G' (account) or 'C' (contract)
+          if (addrStr && addrStr.length === 56 && (addrStr.startsWith('G') || addrStr.startsWith('C'))) {
             console.log('[ContractClient] scvAddress converted to string:', addrStr);
             return addrStr;
           } else {
@@ -812,7 +813,8 @@ export class ContractClient {
             // Last resort: try to extract from the object
             const addr = scVal.address();
             const addrStr = String(addr);
-            if (addrStr && addrStr.length === 56 && addrStr.startsWith('G')) {
+            // Stellar addresses can start with 'G' (account) or 'C' (contract)
+            if (addrStr && addrStr.length === 56 && (addrStr.startsWith('G') || addrStr.startsWith('C'))) {
               return addrStr;
             }
             return null;
@@ -829,7 +831,8 @@ export class ContractClient {
         const vec = scVal.vec()?.map((v) => this.scValToJs(v)) || [];
         // Option<Address> might be returned as Vec with one element
         // If it's a single-element vec with an address, return the address string directly
-        if (vec.length === 1 && typeof vec[0] === 'string' && vec[0].length === 56 && vec[0].startsWith('G')) {
+        // Stellar addresses can start with 'G' (account) or 'C' (contract)
+        if (vec.length === 1 && typeof vec[0] === 'string' && vec[0].length === 56 && (vec[0].startsWith('G') || vec[0].startsWith('C'))) {
           return vec[0];
         }
         return vec;
