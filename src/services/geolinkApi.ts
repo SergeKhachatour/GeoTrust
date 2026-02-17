@@ -37,6 +37,9 @@ export interface NearbyNFT {
   contract_address?: string;
   token_id?: string;
   image_url?: string;
+  server_url?: string;
+  ipfs_hash?: string;
+  collection_name?: string;
 }
 
 export interface NearbyContract {
@@ -199,6 +202,11 @@ class GeoLinkApiClient {
           errorMessage = `Endpoint not found: ${endpoint}`;
         }
         
+        // Special handling for 400 (Bad Request) - may indicate missing parameters
+        if (response.status === 400) {
+          errorMessage = errorDetails?.error || errorDetails?.message || 'Bad Request - Missing required parameters';
+        }
+        
         throw new Error(errorMessage);
       }
 
@@ -251,9 +259,16 @@ class GeoLinkApiClient {
       );
       return response.nearbyUsers || response.users || [];
     } catch (error: any) {
-      // If endpoint doesn't exist (404), return empty array
-      if (error.message?.includes('404') || error.message?.includes('not found')) {
-        console.warn('[GeoLinkAPI] Nearby users endpoint not available, returning empty array');
+      // If endpoint doesn't exist (404) or has missing parameters (400), return empty array
+      // This is non-critical - the app will use session-based users instead
+      if (
+        error.message?.includes('404') || 
+        error.message?.includes('not found') ||
+        error.message?.includes('400') ||
+        error.message?.includes('Missing required parameters')
+      ) {
+        // Silently return empty array - this endpoint may not be available or may require different parameters
+        // The app will use session-based users instead
         return [];
       }
       throw error;

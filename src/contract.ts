@@ -2,7 +2,7 @@ import { Buffer } from 'buffer';
 import { Wallet } from './wallet';
 import { 
   Contract, 
-  SorobanRpc, 
+  rpc,
   Networks, 
   xdr,
   BASE_FEE,
@@ -15,13 +15,13 @@ export class ContractClient {
   private wallet: Wallet;
   private contract: Contract;
   private network: Networks;
-  private rpc: SorobanRpc.Server;
+  private rpc: rpc.Server;
   private contractId: string;
 
   constructor(wallet: Wallet, contractId?: string) {
     this.wallet = wallet;
     this.network = Networks.TESTNET;
-    this.rpc = new SorobanRpc.Server('https://soroban-testnet.stellar.org');
+    this.rpc = new rpc.Server('https://soroban-testnet.stellar.org');
     
     // Debug: Log all env vars to see what's being loaded
     console.log('[ContractClient] REACT_APP_CONTRACT_ID from env:', process.env.REACT_APP_CONTRACT_ID);
@@ -57,6 +57,10 @@ export class ContractClient {
   async getAdmin(): Promise<string | null> {
     try {
       const result = await this.call('get_admin');
+      // Check if result is a special XDR error marker
+      if (result === 'XDR_PARSING_ERROR') {
+        throw new Error('XDR_PARSING_ERROR:Bad union switch: 1');
+      }
       // get_admin returns Option<Address>
       // If result is void/undefined/null, contract is not initialized
       if (!result || result === null || result === undefined) {
@@ -83,7 +87,12 @@ export class ContractClient {
       }
       // Fallback: try to convert to string
       return String(result);
-    } catch (error) {
+    } catch (error: any) {
+      // Check if this is an XDR parsing error - re-throw it so caller can handle it
+      if (error.message?.includes('XDR_PARSING_ERROR')) {
+        console.error('[ContractClient] XDR parsing error when getting admin:', error);
+        throw error; // Re-throw XDR errors so caller can distinguish them
+      }
       console.error('[ContractClient] Failed to get admin:', error);
       // If get_admin fails (e.g., contract not initialized), return null
       return null;
@@ -531,7 +540,28 @@ export class ContractClient {
         .build();
 
       // Simulate to get the result
-      const simResponse = await this.rpc.simulateTransaction(transaction);
+      let simResponse: rpc.Api.SimulateTransactionResponse;
+      try {
+        simResponse = await this.rpc.simulateTransaction(transaction);
+      } catch (simError: any) {
+        // Check if it's an XDR parsing error during simulation
+        // This can happen when the SDK tries to parse the response and encounters an Option type
+        if (simError.message?.includes('Bad union switch') || 
+            simError.message?.includes('union switch') ||
+            simError.message?.includes('XDR') ||
+            simError.toString().includes('Bad union switch')) {
+          console.warn(`[ContractClient.call] XDR parsing error during simulation for ${functionName} - contract format may have changed or SDK version mismatch:`, simError.message || simError.toString());
+          // For read operations, return a special marker for XDR errors so callers can distinguish
+          // from actual null returns (e.g., Option::None)
+          if (isReadOperation) {
+            // Return a special marker that indicates XDR error (not actual null)
+            return 'XDR_PARSING_ERROR' as any;
+          }
+          // For write operations, we can't proceed without simulation
+          throw new Error(`XDR_PARSING_ERROR:${simError.message || simError.toString()}`);
+        }
+        throw simError;
+      }
       
       // Check if simulation failed
       if ('error' in simResponse) {
@@ -543,9 +573,22 @@ export class ContractClient {
       if (simResponse && 'result' in simResponse && simResponse.result) {
         const returnValue = simResponse.result.retval;
         if (returnValue) {
-          const converted = this.scValToJs(returnValue);
-          console.log(`[ContractClient.call] Read operation ${functionName} result:`, converted, typeof converted);
-          return converted;
+          try {
+            const converted = this.scValToJs(returnValue);
+            console.log(`[ContractClient.call] Read operation ${functionName} result:`, converted, typeof converted);
+            return converted;
+          } catch (parseError: any) {
+            // If parsing fails with "Bad union switch", the contract might have changed
+            if (parseError.message?.includes('Bad union switch') || 
+                parseError.message?.includes('union switch') ||
+                parseError.message?.includes('XDR') ||
+                parseError.toString().includes('Bad union switch')) {
+              console.warn(`[ContractClient.call] XDR parsing error for ${functionName} - contract format may have changed:`, parseError.message || parseError.toString());
+              // For read operations, return a special marker for XDR errors
+              return 'XDR_PARSING_ERROR' as any;
+            }
+            throw parseError;
+          }
         }
       }
       
@@ -567,7 +610,26 @@ export class ContractClient {
 
     // Simulate to get resource usage
     console.log(`[ContractClient.call] Simulating transaction for ${functionName}...`);
-    const simResponse = await this.rpc.simulateTransaction(transaction);
+    let simResponse: rpc.Api.SimulateTransactionResponse;
+    try {
+      simResponse = await this.rpc.simulateTransaction(transaction);
+    } catch (simError: any) {
+      // Check if it's an XDR parsing error during simulation
+      // This can happen when the SDK tries to parse the response and encounters an Option type
+      if (simError.message?.includes('Bad union switch') || 
+          simError.message?.includes('union switch') ||
+          simError.message?.includes('XDR') ||
+          simError.toString().includes('Bad union switch')) {
+        console.warn(`[ContractClient.call] XDR parsing error during simulation for ${functionName} - contract format may have changed or SDK version mismatch:`, simError.message || simError.toString());
+        // For read operations, return null gracefully
+        if (isReadOperation) {
+          return null;
+        }
+        // For write operations, we can't proceed without simulation
+        throw new Error(`XDR_PARSING_ERROR:${simError.message || simError.toString()}`);
+      }
+      throw simError;
+    }
     
     // Check if simulation failed
     if ('error' in simResponse) {

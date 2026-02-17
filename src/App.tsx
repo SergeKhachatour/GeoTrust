@@ -12,6 +12,43 @@ import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 import { Horizon } from '@stellar/stellar-sdk';
 import { geolinkApi, NearbyUser, NearbyNFT, NearbyContract } from './services/geolinkApi';
 
+// Helper function to construct NFT image URL (matching xyz-wallet exactly)
+function cleanServerUrl(serverUrl: string | null | undefined): string | null {
+  if (!serverUrl) return null;
+  
+  let baseUrl = serverUrl.trim();
+  
+  // Remove any existing /ipfs/ path and everything after it
+  baseUrl = baseUrl.replace(/\/ipfs\/.*$/i, '');
+  
+  // Remove trailing slashes
+  baseUrl = baseUrl.replace(/\/+$/, '');
+  
+  // Remove protocol if present (we'll add https://)
+  baseUrl = baseUrl.replace(/^https?:\/\//i, '');
+  
+  // Add https:// protocol
+  if (baseUrl) {
+    return `https://${baseUrl}`;
+  }
+  
+  return null;
+}
+
+function constructImageUrl(serverUrl: string | null | undefined, ipfsHash: string | null | undefined): string {
+  if (!ipfsHash) {
+    return 'https://via.placeholder.com/200x200?text=NFT';
+  }
+  
+  const baseUrl = cleanServerUrl(serverUrl);
+  if (!baseUrl) {
+    // Fallback to public IPFS gateway
+    return `https://ipfs.io/ipfs/${ipfsHash}`;
+  }
+  
+  return `${baseUrl}/ipfs/${ipfsHash}`;
+}
+
 // Set Mapbox access token
 const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
 if (mapboxToken) {
@@ -169,9 +206,21 @@ const TrustlineComparison: React.FC<{ myPublicKey: string; theirPublicKey: strin
 const App: React.FC = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const [mapZoom, setMapZoom] = useState<number>(2); // Track map zoom level
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [contractClient, setContractClient] = useState<ContractClient | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Initialize isAdmin from localStorage if available (for XDR error cases)
+  const [isAdmin, setIsAdmin] = useState(() => {
+    const stored = localStorage.getItem('geotrust_isAdmin');
+    const storedAddress = localStorage.getItem('geotrust_adminAddress');
+    const currentAddress = localStorage.getItem('wallet_address');
+    // Only restore if the stored address matches current address
+    if (stored === 'true' && storedAddress === currentAddress) {
+      console.log('[App] Restoring admin status from localStorage for', currentAddress);
+      return true;
+    }
+    return false;
+  });
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [overlayMinimized, setOverlayMinimized] = useState(false);
   const [allowedCountries, setAllowedCountries] = useState<Set<number>>(new Set()); // u32 country codes
@@ -210,6 +259,15 @@ const App: React.FC = () => {
   const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
   const [otherSessionsMinimized, setOtherSessionsMinimized] = useState(false);
   const [adminPanelMinimized, setAdminPanelMinimized] = useState(false);
+  
+  // Refs for NFT and contract markers (matching xyz-wallet pattern)
+  const nftMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const nftCirclesRef = useRef<string[]>([]);
+  const contractMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const contractCirclesRef = useRef<string[]>([]);
+  const userCirclesRef = useRef<string[]>([]);
+  const [selectedNFT, setSelectedNFT] = useState<NearbyNFT | null>(null);
+  const [selectedContract, setSelectedContract] = useState<NearbyContract | null>(null);
 
   // Define updateCountryOverlay first (used by loadCountryOverlay)
   const updateCountryOverlay = useCallback(() => {
@@ -228,10 +286,13 @@ const App: React.FC = () => {
 
     console.log('[App] updateCountryOverlay: Updating', data.features.length, 'features', {
       allowedCount: allowedCountries.size,
-      defaultAllowAll
+      defaultAllowAll,
+      allowedCountriesArray: Array.from(allowedCountries).slice(0, 10) // First 10 for debugging
     });
 
     let updatedCount = 0;
+    let allowedCount = 0;
+    let deniedCount = 0;
     data.features.forEach((feature) => {
       // Ensure properties object exists
       if (!feature.properties) {
@@ -292,13 +353,49 @@ const App: React.FC = () => {
       if (wasAllowed !== feature.properties.allowed) {
         updatedCount++;
       }
+      
+      // Count allowed vs denied
+      if (feature.properties.allowed) {
+        allowedCount++;
+      } else {
+        deniedCount++;
+      }
     });
 
-    console.log('[App] updateCountryOverlay: Updated', updatedCount, 'features');
+    console.log('[App] updateCountryOverlay: Updated', updatedCount, 'features', {
+      allowed: allowedCount,
+      denied: deniedCount,
+      total: data.features.length
+    });
     
     // Update the source with modified data
     source.setData(data);
   }, [defaultAllowAll, allowedCountries]);
+
+  // Call updateCountryOverlay when defaultAllowAll or allowedCountries changes
+  useEffect(() => {
+    // Use a delay to ensure state has fully updated and propagated
+    const timer = setTimeout(() => {
+      if (map.current && map.current.loaded()) {
+        const source = map.current.getSource('countries');
+        if (source) {
+          // Get the latest state values directly (not from closure) to ensure we have the updated values
+          console.log('[App] defaultAllowAll or allowedCountries changed, updating overlay', { 
+            defaultAllowAll, 
+            allowedCount: allowedCountries.size,
+            note: 'Using latest state values from closure'
+          });
+          // updateCountryOverlay is a useCallback, so it will use the latest defaultAllowAll and allowedCountries
+          updateCountryOverlay();
+        } else {
+          console.warn('[App] Countries source not ready yet for overlay update');
+        }
+      } else {
+        console.warn('[App] Map not ready yet for overlay update');
+      }
+    }, 300); // Increased delay to ensure React state has fully updated and propagated
+    return () => clearTimeout(timer);
+  }, [defaultAllowAll, allowedCountries, updateCountryOverlay]);
 
   // Define loadCountryOverlay (uses updateCountryOverlay)
   const loadCountryOverlay = useCallback(async () => {
@@ -437,8 +534,9 @@ const App: React.FC = () => {
         });
       }
       
-      // Update overlay after loading to ensure all properties are set
-      updateCountryOverlay();
+      // Don't call updateCountryOverlay here - it will be called by the useEffect
+      // that watches defaultAllowAll and allowedCountries after state updates
+      // This ensures we use the correct state values, not stale closure values
     } catch (error) {
       console.error('Failed to load countries GeoJSON:', error);
     }
@@ -487,20 +585,23 @@ const App: React.FC = () => {
         style: 'mapbox://styles/mapbox/light-v11',
         projection: 'globe',
         center: [0, 0],
-        zoom: 2,
+            zoom: 2,
+            // Set initial zoom for logo visibility
+            // Logo will be visible at zoom <= 4
       });
 
       const handleMapLoad = () => {
         console.log('[App] Map loaded successfully');
         if (map.current) {
+          // Set initial zoom state for logo visibility
+          setMapZoom(map.current.getZoom());
+          
           loadCountryOverlay().then(() => {
-            // After overlay is loaded, update it with current country policy
-            // This ensures countries show correctly even if policy was loaded before map
-            console.log('[App] Country overlay loaded, updating with policy');
-            setTimeout(() => {
-              updateCountryOverlay();
-            }, 200);
+            // After overlay is loaded, the useEffect watching defaultAllowAll/allowedCountries
+            // will automatically call updateCountryOverlay when state updates from loadData
+            console.log('[App] Country overlay loaded - will update when policy state is ready');
           });
+          // NFT markers will be rendered automatically via useEffect when nearbyNFTs changes
           // Admin check will happen automatically via useEffect when wallet and client are ready
         }
       };
@@ -508,6 +609,19 @@ const App: React.FC = () => {
 
       map.current.on('error', (e) => {
         console.error('[App] Map error:', e);
+      });
+
+      // Track zoom level for logo visibility
+      map.current.on('zoom', () => {
+        if (map.current) {
+          setMapZoom(map.current.getZoom());
+        }
+      });
+
+      map.current.on('zoomend', () => {
+        if (map.current) {
+          setMapZoom(map.current.getZoom());
+        }
       });
 
       map.current.on('style.load', () => {
@@ -632,7 +746,16 @@ const App: React.FC = () => {
         el.className = 'marker marker-opponent session-user-marker';
         const publicKeyShort = `${session.player1.slice(0, 4)}...${session.player1.slice(-4)}`;
         el.innerHTML = `<div class="marker-label">👤<div class="marker-public-key">${publicKeyShort}</div></div>`;
-        el.style.cursor = 'pointer';
+        // Match contract marker CSS to prevent movement on zoom
+        el.style.cssText = `
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          width: 24px;
+          height: 24px;
+        `;
         el.title = `${session.player1} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -669,7 +792,16 @@ const App: React.FC = () => {
         el.className = 'marker marker-opponent session-user-marker';
         const publicKeyShort = `${session.player2.slice(0, 4)}...${session.player2.slice(-4)}`;
         el.innerHTML = `<div class="marker-label">👤<div class="marker-public-key">${publicKeyShort}</div></div>`;
-        el.style.cursor = 'pointer';
+        // Match contract marker CSS to prevent movement on zoom
+        el.style.cssText = `
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          width: 24px;
+          height: 24px;
+        `;
         el.title = `${session.player2} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -760,23 +892,96 @@ const App: React.FC = () => {
     
     // Fetch country policy immediately (doesn't require wallet)
     const loadData = async () => {
+      let defaultAllowAll = false;
+      let allowedCount = 0;
+      let policyLoaded = false;
+      
+      // Try to get country policy
       try {
-        const [defaultAllowAll, allowedCount, deniedCount] = await client.getCountryPolicy();
-        setDefaultAllowAll(defaultAllowAll);
-        
-        // Fetch allowed countries list
-        const allowedList = await client.listAllowedCountries(0, 1000);
-        setAllowedCountries(new Set(allowedList));
-        
-        console.log('[App] Country policy loaded:', { defaultAllowAll, allowedCount, deniedCount, allowedList });
-        
-        // The overlay will be updated automatically by the useEffect that watches allowedCountries/defaultAllowAll
-        // No need to manually call updateCountryOverlay here - it will be triggered by state changes
-        
-        // Fetch active sessions (will be called after readOnlyClient is set)
-      } catch (error) {
-        console.error('[App] Failed to load data:', error);
+        const policyResult = await client.getCountryPolicy();
+        // Check if result is valid array
+        if (Array.isArray(policyResult) && policyResult.length >= 3) {
+          [defaultAllowAll, allowedCount] = policyResult;
+          setDefaultAllowAll(defaultAllowAll);
+          policyLoaded = true;
+          console.log('[App] Country policy loaded:', { defaultAllowAll, allowedCount });
+        } else if (policyResult === null) {
+          // XDR parsing error - contract client now returns null gracefully
+          console.warn('[App] XDR parsing error when loading country policy - will try to load countries list directly');
+        }
+      } catch (error: any) {
+        // If getCountryPolicy fails with XDR error, try to still load countries list
+        if (error.message?.includes('XDR_PARSING_ERROR')) {
+          console.warn('[App] XDR parsing error when loading country policy - will try to load countries list directly');
+        } else {
+          console.error('[App] Failed to get country policy:', error);
+        }
       }
+      
+      // Always try to fetch allowed countries list (even if getCountryPolicy failed)
+      // This might work even when getCountryPolicy fails due to XDR issues
+      let countriesLoaded = false;
+      try {
+        // Try to get a reasonable page size - if allowedCount is 0, try a large number
+        const pageSize = allowedCount > 0 ? Math.min(allowedCount, 1000) : 1000;
+        const listResult = await client.listAllowedCountries(0, pageSize);
+        if (Array.isArray(listResult)) {
+          if (listResult.length > 0) {
+            console.log('[App] Successfully loaded', listResult.length, 'allowed countries');
+            setAllowedCountries(new Set(listResult));
+            countriesLoaded = true;
+          } else {
+            console.log('[App] No allowed countries in list (empty array)');
+            setAllowedCountries(new Set());
+            countriesLoaded = true; // Still mark as loaded, just empty
+          }
+        } else if (listResult === null) {
+          // XDR parsing error - contract client now returns null gracefully
+          console.warn('[App] XDR parsing error when listing countries - SDK may be incompatible');
+          if (!policyLoaded) {
+            // If we can't load policy or countries, default to showing all countries
+            console.log('[App] Could not load country policy or list - defaulting to show all countries');
+            setDefaultAllowAll(true);
+            setAllowedCountries(new Set());
+          }
+        } else {
+          console.warn('[App] listAllowedCountries returned non-array result:', listResult);
+          if (!policyLoaded) {
+            // If we can't load policy or countries, default to showing all countries
+            // This allows the map to be usable even when contract calls fail
+            console.log('[App] Could not load country policy or list - defaulting to show all countries');
+            setDefaultAllowAll(true);
+            setAllowedCountries(new Set());
+          }
+        }
+      } catch (listError: any) {
+        // If listing countries also fails, check if it's XDR error
+        if (listError.message?.includes('XDR_PARSING_ERROR')) {
+          console.warn('[App] XDR parsing error when listing countries - SDK may be incompatible');
+        } else {
+          console.warn('[App] Failed to list allowed countries:', listError);
+        }
+        // Only set empty set if we also don't have defaultAllowAll info
+        // If defaultAllowAll is true, we want to show all countries
+        if (!policyLoaded) {
+          // If we can't load policy or countries, default to showing all countries
+          // This allows the map to be usable even when contract calls fail
+          console.log('[App] Could not load country policy or list - defaulting to show all countries');
+          setDefaultAllowAll(true);
+          setAllowedCountries(new Set());
+          // The useEffect that watches defaultAllowAll and allowedCountries will automatically call updateCountryOverlay
+        }
+      }
+      
+      // Get the current state value for logging (state updates are async)
+      const finalDefaultAllowAll = policyLoaded ? defaultAllowAll : true; // If policy not loaded, we default to true
+      console.log('[App] Country data loading complete:', { 
+        policyLoaded, 
+        countriesLoaded, 
+        defaultAllowAll: finalDefaultAllowAll, 
+        allowedCount,
+        note: 'State will update asynchronously - useEffect will trigger updateCountryOverlay when defaultAllowAll changes'
+      });
     };
     
     loadData();
@@ -830,10 +1035,41 @@ const App: React.FC = () => {
   const updateOtherUserMarkers = useCallback((users: Array<{ id: string; location: [number, number]; distance: number }>) => {
     if (!map.current) return;
 
+    if (!showOtherUsers) {
+      // Only clear if we're hiding users
+      document.querySelectorAll('.other-user-marker').forEach(m => m.remove());
+      if (map.current && map.current.isStyleLoaded()) {
+        userCirclesRef.current.forEach((sourceId) => {
+          const layerId = `${sourceId}-layer`;
+          if (map.current!.getLayer(layerId)) {
+            map.current!.removeLayer(layerId);
+          }
+          if (map.current!.getSource(sourceId)) {
+            map.current!.removeSource(sourceId);
+          }
+        });
+      }
+      userCirclesRef.current = [];
+      return;
+    }
+
+    // Batch marker updates to prevent flickering - clear and re-add in one operation
     // Remove existing markers
     document.querySelectorAll('.other-user-marker').forEach(m => m.remove());
-
-    if (!showOtherUsers) return;
+    
+    // Clear existing user radius circles
+    if (map.current && map.current.isStyleLoaded()) {
+      userCirclesRef.current.forEach((sourceId) => {
+        const layerId = `${sourceId}-layer`;
+        if (map.current!.getLayer(layerId)) {
+          map.current!.removeLayer(layerId);
+        }
+        if (map.current!.getSource(sourceId)) {
+          map.current!.removeSource(sourceId);
+        }
+      });
+    }
+    userCirclesRef.current = [];
 
     // Ensure map is loaded and container is ready before adding markers
     const addMarkers = () => {
@@ -856,7 +1092,18 @@ const App: React.FC = () => {
         const el = document.createElement('div');
         el.className = 'marker marker-opponent other-user-marker';
         el.innerHTML = `<div class="marker-distance">${user.distance.toFixed(1)} km</div>`;
-        el.style.cursor = 'pointer';
+        // Match contract marker CSS to prevent movement on zoom
+        // Override position: relative from .marker class with flex properties
+        // Important: Keep position: relative for marker-distance positioning, but add flex for centering
+        el.style.cssText = `
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          width: 24px;
+          height: 24px;
+        `;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           setSelectedMarker({
@@ -874,6 +1121,61 @@ const App: React.FC = () => {
             .addTo(map.current!);
           
           marker.getElement().setAttribute('data-user-id', user.id);
+          
+          // Add radius circle for user (use fixed visible radius - 2000m for better visibility)
+          // Note: user.distance is the distance from current user, not the user's radius
+          // Using a fixed radius makes circles visible on the map
+          const radiusMeters = 2000; // 2km radius for visibility
+          const sourceId = `user-radius-${user.id || Math.random()}`;
+          const layerId = `${sourceId}-layer`;
+          
+          // Convert radius from meters to degrees (approximate)
+          const radiusInDegrees = radiusMeters / 111000;
+          const circlePoints: [number, number][] = Array.from({ length: 32 }, (_, i) => {
+            const angle = (i / 32) * 2 * Math.PI;
+            const x = user.location[0] + radiusInDegrees * Math.cos(angle);
+            const y = user.location[1] + radiusInDegrees * Math.sin(angle);
+            return [x, y] as [number, number];
+          });
+          
+          const circle: GeoJSON.Feature<GeoJSON.Polygon> = {
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [circlePoints]
+            },
+            properties: {}
+          };
+          
+          // Add circle to map
+          const addUserCircle = () => {
+            if (!map.current) return;
+            try {
+              if (map.current.getSource(sourceId)) return;
+              map.current.addSource(sourceId, { type: 'geojson', data: circle });
+              map.current.addLayer({
+                id: layerId,
+                type: 'line',
+                source: sourceId,
+                paint: {
+                  'line-color': '#4CAF50',
+                  'line-width': 2,
+                  'line-opacity': 0.5,
+                  'line-dasharray': [2, 2] // Dotted line
+                }
+              });
+              userCirclesRef.current.push(sourceId);
+            } catch (error) {
+              console.error(`[App] Error adding user radius circle:`, error);
+            }
+          };
+          
+          if (!map.current) return; // Safety check
+          if (!map.current.isStyleLoaded()) {
+            map.current.once('style.load', addUserCircle);
+          } else {
+            addUserCircle();
+          }
         } catch (error) {
           console.error('[App] Failed to add other-user marker:', error);
         }
@@ -882,6 +1184,413 @@ const App: React.FC = () => {
 
     addMarkers();
   }, [showOtherUsers]);
+
+  // Render NFT markers on the map (matching xyz-wallet pattern)
+  const renderNFTMarkers = useCallback(() => {
+    if (!map.current) return;
+    
+    console.log('[App] renderNFTMarkers called with', nearbyNFTs.length, 'NFTs');
+    
+    // Ensure map is fully loaded and style is loaded before adding markers
+    if (!map.current.loaded() || !map.current.isStyleLoaded()) {
+      console.log('[App] renderNFTMarkers: Map not fully ready, waiting...', {
+        loaded: map.current.loaded(),
+        styleLoaded: map.current.isStyleLoaded()
+      });
+      if (!map.current.loaded()) {
+        map.current.once('load', renderNFTMarkers);
+      } else {
+        map.current.once('style.load', renderNFTMarkers);
+      }
+      return;
+    }
+    
+    // Clear existing NFT markers
+    nftMarkersRef.current.forEach(marker => marker.remove());
+    nftMarkersRef.current = [];
+    
+    // Clear existing NFT radius circles
+    if (map.current.isStyleLoaded()) {
+      nftCirclesRef.current.forEach((sourceId) => {
+        const layerId = `${sourceId}-layer`;
+        if (map.current!.getLayer(layerId)) {
+          map.current!.removeLayer(layerId);
+        }
+        if (map.current!.getSource(sourceId)) {
+          map.current!.removeSource(sourceId);
+        }
+      });
+    }
+    nftCirclesRef.current = [];
+    
+    console.log('[App] Adding', nearbyNFTs.length, 'NFT markers to map');
+    
+    // Add markers for nearby NFTs
+    nearbyNFTs.forEach((nft) => {
+      if (nft.latitude && nft.longitude) {
+        // Construct image URL using the helper function (matching xyz-wallet)
+        const imageUrl = constructImageUrl(nft.server_url, nft.ipfs_hash) || nft.image_url || 'https://via.placeholder.com/64x64?text=NFT';
+        
+        const el = document.createElement('div');
+        el.className = 'nft-marker';
+        // Use background-image like xyz-wallet for better styling control
+        // Match contract marker CSS to prevent movement on zoom
+        el.style.cssText = `
+          width: 64px;
+          height: 64px;
+          background-image: url('${imageUrl}');
+          background-size: cover;
+          background-repeat: no-repeat;
+          background-position: center;
+          border-radius: 8px;
+          border: 3px solid #FFD700;
+          cursor: pointer;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        `;
+        // Add fallback if image fails to load
+        const img = new Image();
+        img.onerror = () => {
+          el.style.backgroundImage = 'url(https://via.placeholder.com/64x64?text=NFT)';
+        };
+        img.src = imageUrl;
+        el.title = nft.collection_name || nft.name || 'NFT';
+        
+        try {
+          const nftMarker = new mapboxgl.Marker({ element: el })
+            .setLngLat([nft.longitude, nft.latitude])
+            .addTo(map.current!);
+          
+          // Add click event to show NFT info
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log('[App] NFT marker clicked:', nft);
+            setSelectedNFT(nft);
+            setSelectedMarker({
+              type: 'nft',
+              location: [nft.longitude, nft.latitude],
+              nft: nft,
+            });
+          });
+          
+          nftMarkersRef.current.push(nftMarker);
+          console.log('[App] Added NFT marker at', [nft.longitude, nft.latitude]);
+        } catch (error) {
+          console.error('[App] Failed to add NFT marker:', error, nft);
+        }
+        
+        // Add radius circle for NFT (use fixed visible radius - 1000m for better visibility)
+        // Note: nft.distance is the distance from user, not the NFT's radius
+        // Using a fixed radius makes circles visible on the map
+        const radiusMeters = 1000; // 1km radius for visibility
+        const sourceId = `nft-radius-${nft.id || Math.random()}`;
+        const layerId = `${sourceId}-layer`;
+        
+        // Convert radius from meters to degrees (approximate)
+        const radiusInDegrees = radiusMeters / 111000;
+        const circlePoints: [number, number][] = Array.from({ length: 32 }, (_, i) => {
+          const angle = (i / 32) * 2 * Math.PI;
+          const x = nft.longitude + radiusInDegrees * Math.cos(angle);
+          const y = nft.latitude + radiusInDegrees * Math.sin(angle);
+          return [x, y] as [number, number];
+        });
+        
+        const circle: GeoJSON.Feature<GeoJSON.Polygon> = {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [circlePoints]
+          },
+          properties: {}
+        };
+        
+        // Add circle to map
+        if (!map.current) return;
+        
+        const addNFTCircle = () => {
+          if (!map.current) return;
+          try {
+            if (map.current.getSource(sourceId)) return;
+            map.current.addSource(sourceId, { type: 'geojson', data: circle });
+            map.current.addLayer({
+              id: layerId,
+              type: 'line',
+              source: sourceId,
+              paint: {
+                'line-color': '#FFD700',
+                'line-width': 2,
+                'line-opacity': 0.5,
+                'line-dasharray': [2, 2] // Dotted line
+              }
+            });
+            nftCirclesRef.current.push(sourceId);
+          } catch (error) {
+            console.error(`[App] Error adding NFT radius circle:`, error);
+          }
+        };
+        
+        if (!map.current.isStyleLoaded()) {
+          map.current.once('style.load', addNFTCircle);
+        } else {
+          addNFTCircle();
+        }
+      }
+    });
+  }, [nearbyNFTs]);
+
+  // Update NFT markers when nearbyNFTs changes
+  useEffect(() => {
+    // Use a small timeout to batch updates and prevent flickering
+    const timeoutId = setTimeout(() => {
+      if (!map.current) {
+        console.log('[App] Map not ready for NFT markers yet');
+        return;
+      }
+      
+      if (nearbyNFTs.length > 0) {
+        console.log('[App] Rendering', nearbyNFTs.length, 'NFT markers');
+        renderNFTMarkers();
+      } else {
+        // Clear markers when no NFTs
+        nftMarkersRef.current.forEach(marker => marker.remove());
+        nftMarkersRef.current = [];
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [nearbyNFTs, renderNFTMarkers]);
+
+  // Render contract markers on the map (matching xyz-wallet pattern)
+  const renderContractMarkers = useCallback(() => {
+    if (!map.current) {
+      console.log('[App] renderContractMarkers: map.current is null');
+      return;
+    }
+    
+    console.log('[App] renderContractMarkers called with', nearbyContracts.length, 'contracts', {
+      mapLoaded: map.current.loaded(),
+      mapStyleLoaded: map.current.isStyleLoaded()
+    });
+    
+    // Clear existing contract markers (batch with re-adding to prevent flickering)
+    contractMarkersRef.current.forEach(marker => marker.remove());
+    contractMarkersRef.current = [];
+    
+    // Clear existing contract radius circles
+    if (map.current.isStyleLoaded()) {
+      contractCirclesRef.current.forEach((sourceId) => {
+        const layerId = `${sourceId}-layer`;
+        if (map.current!.getLayer(layerId)) {
+          map.current!.removeLayer(layerId);
+        }
+        if (map.current!.getSource(sourceId)) {
+          map.current!.removeSource(sourceId);
+        }
+      });
+    }
+    contractCirclesRef.current = [];
+    
+    // Ensure map is loaded before adding markers
+    if (!map.current.loaded()) {
+      console.log('[App] renderContractMarkers: Map not loaded yet, waiting for load event');
+      map.current.once('load', renderContractMarkers);
+      return;
+    }
+    
+    // Add markers for nearby contracts
+    let markersAdded = 0;
+    let invalidCoords = 0;
+    console.log('[App] Processing', nearbyContracts.length, 'contracts for markers');
+    
+    nearbyContracts.forEach((contract, index) => {
+      // Validate coordinates
+      const lat = typeof contract.latitude === 'number' ? contract.latitude : parseFloat(String(contract.latitude || ''));
+      const lng = typeof contract.longitude === 'number' ? contract.longitude : parseFloat(String(contract.longitude || ''));
+      
+      console.log(`[App] Contract ${index}:`, {
+        name: contract.name,
+        rawLat: contract.latitude,
+        rawLng: contract.longitude,
+        parsedLat: lat,
+        parsedLng: lng,
+        isValid: !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+      });
+      
+      if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        try {
+          // Create contract marker element with different styling (blue/purple) - square shape (matching xyz-wallet)
+          const el = document.createElement('div');
+          el.className = 'contract-marker';
+          el.style.cssText = `
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            border-radius: 8px;
+            border: 3px solid #a78bfa;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            color: white;
+          `;
+          el.innerHTML = '🧮';
+          el.title = contract.name || 'Smart Contract';
+          
+          const contractMarker = new mapboxgl.Marker({ element: el })
+            .setLngLat([lng, lat])
+            .addTo(map.current!);
+          
+          // Add click event to show contract info
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log('[App] Contract marker clicked:', contract);
+            setSelectedContract(contract);
+            setSelectedMarker({
+              type: 'contract',
+              location: [lng, lat],
+              contract: contract,
+            });
+          });
+          
+          contractMarkersRef.current.push(contractMarker);
+          markersAdded++;
+          
+          // Add radius circle for contract (use fixed visible radius if radius_meters not available)
+          // Use contract's radius_meters if available, otherwise use default 2000m for visibility
+          const contractRadiusMeters = (contract as any).radius_meters || 2000;
+          if (contractRadiusMeters) {
+            const sourceId = `contract-radius-${index}`;
+            const layerId = `${sourceId}-layer`;
+            
+            // Convert radius from meters to degrees (approximate)
+            const radiusInDegrees = contractRadiusMeters / 111000;
+            const circlePoints: [number, number][] = Array.from({ length: 32 }, (_, i) => {
+              const angle = (i / 32) * 2 * Math.PI;
+              const x = lng + radiusInDegrees * Math.cos(angle);
+              const y = lat + radiusInDegrees * Math.sin(angle);
+              return [x, y] as [number, number];
+            });
+            
+            const circle: GeoJSON.Feature<GeoJSON.Polygon> = {
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [circlePoints]
+              },
+              properties: {}
+            };
+            
+            // Check if style is loaded before adding source
+            if (!map.current) return; // Safety check
+            
+            if (!map.current.isStyleLoaded()) {
+              map.current.once('style.load', () => {
+                if (!map.current) return; // Safety check
+                try {
+                  if (map.current.getSource(sourceId)) return;
+                  map.current.addSource(sourceId, { type: 'geojson', data: circle });
+                  map.current.addLayer({
+                    id: layerId,
+                    type: 'line',
+                    source: sourceId,
+                    paint: {
+                      'line-color': '#8b5cf6',
+                      'line-width': 2,
+                      'line-opacity': 0.6,
+                      'line-dasharray': [2, 2] // Dotted line
+                    }
+                  });
+                  contractCirclesRef.current.push(sourceId);
+                } catch (error) {
+                  console.error(`[App] Error adding contract radius circle:`, error);
+                }
+              });
+            } else {
+              try {
+                if (!map.current) return; // Safety check
+                if (map.current.getSource(sourceId)) return;
+                map.current.addSource(sourceId, { type: 'geojson', data: circle });
+                map.current.addLayer({
+                  id: layerId,
+                  type: 'line',
+                  source: sourceId,
+                  paint: {
+                    'line-color': '#8b5cf6',
+                    'line-width': 2,
+                    'line-opacity': 0.6,
+                    'line-dasharray': [2, 2] // Dotted line
+                  }
+                });
+                contractCirclesRef.current.push(sourceId);
+              } catch (error) {
+                console.error(`[App] Error adding contract radius circle:`, error);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`[App] Error adding contract marker ${index}:`, error, contract);
+        }
+      } else {
+        invalidCoords++;
+        console.warn(`[App] Invalid coordinates for contract ${index}:`, { lat, lng, contract });
+      }
+    });
+    
+    console.log(`[App] Contract markers summary:`, {
+      total: nearbyContracts.length,
+      added: markersAdded,
+      invalidCoords: invalidCoords,
+      mapLoaded: map.current?.loaded(),
+      mapStyleLoaded: map.current?.isStyleLoaded()
+    });
+  }, [nearbyContracts]);
+
+  // Update contract markers when nearbyContracts changes
+  useEffect(() => {
+    // Use a small timeout to batch updates and prevent flickering
+    const timeoutId = setTimeout(() => {
+      if (!map.current) {
+        console.log('[App] Map not ready for contract markers yet');
+        return;
+      }
+      
+      if (nearbyContracts.length > 0) {
+        console.log('[App] Rendering', nearbyContracts.length, 'contract markers');
+        // Wait for map to be fully loaded before rendering markers
+        const renderWhenReady = () => {
+          if (map.current && map.current.loaded() && map.current.isStyleLoaded()) {
+            console.log('[App] Map ready, rendering contract markers');
+            renderContractMarkers();
+          } else {
+            // Retry after a short delay
+            setTimeout(renderWhenReady, 100);
+          }
+        };
+        renderWhenReady();
+      } else {
+        // Clear markers when no contracts
+        contractMarkersRef.current.forEach(marker => marker.remove());
+        contractMarkersRef.current = [];
+        // Clear circles
+        if (map.current && map.current.isStyleLoaded()) {
+          contractCirclesRef.current.forEach((sourceId) => {
+            const layerId = `${sourceId}-layer`;
+            if (map.current!.getLayer(layerId)) {
+              map.current!.removeLayer(layerId);
+            }
+            if (map.current!.getSource(sourceId)) {
+              map.current!.removeSource(sourceId);
+            }
+          });
+        }
+        contractCirclesRef.current = [];
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [nearbyContracts, renderContractMarkers]);
 
   const fetchOtherUsers = useCallback(async (playerLoc: [number, number]) => {
     if (!showOtherUsers || !playerLoc) return;
@@ -960,9 +1669,29 @@ const App: React.FC = () => {
       
       // Also fetch nearby NFTs and contracts
       const [nfts, contracts] = await Promise.all([
-        geolinkApi.getNearbyNFTs(playerLoc[1], playerLoc[0], maxDistance * 1000).catch(() => []),
-        geolinkApi.getNearbyContracts(playerLoc[1], playerLoc[0], maxDistance * 1000).catch(() => []),
+        geolinkApi.getNearbyNFTs(playerLoc[1], playerLoc[0], maxDistance * 1000).catch((err) => {
+          console.warn('[App] Failed to fetch nearby NFTs:', err);
+          return [];
+        }),
+        geolinkApi.getNearbyContracts(playerLoc[1], playerLoc[0], maxDistance * 1000).catch((err) => {
+          console.warn('[App] Failed to fetch nearby contracts:', err);
+          return [];
+        }),
       ]);
+      
+      console.log('[App] Fetched nearby entities:', { nfts: nfts.length, contracts: contracts.length });
+      if (contracts.length > 0) {
+        console.log('[App] Nearby contracts:', contracts);
+        // Log first contract structure for debugging
+        console.log('[App] First contract structure:', {
+          name: contracts[0].name,
+          latitude: contracts[0].latitude,
+          longitude: contracts[0].longitude,
+          latType: typeof contracts[0].latitude,
+          lngType: typeof contracts[0].longitude,
+          fullContract: contracts[0]
+        });
+      }
       
       setNearbyNFTs(nfts);
       setNearbyContracts(contracts);
@@ -1430,6 +2159,10 @@ const App: React.FC = () => {
               if (error.message?.includes('rejected') || error.message?.includes('denied')) {
                 // User rejected transaction - this is expected, don't show error
                 console.log('Transaction rejected by user');
+              } else if (error.message?.includes('XDR_PARSING_ERROR') || error.message?.includes('XDR format error')) {
+                // XDR parsing errors indicate SDK compatibility issues - log but don't show error to user
+                console.warn('[App] Auto-checkin failed due to XDR parsing error - SDK may be incompatible:', error.message);
+                // Don't show error to user - they've already been notified about XDR issues during admin check
               } else if (!error.message?.includes('Country not allowed')) {
                 console.error('Auto-checkin failed:', error);
               }
@@ -1455,10 +2188,61 @@ const App: React.FC = () => {
 
     try {
       console.log('[App] Checking admin status...');
-      const admin = await contractClient.getAdmin();
+      let admin: string | null = null;
+      let xdrError = false;
+      
+      try {
+        admin = await contractClient.getAdmin();
+      } catch (error: any) {
+        // Check if this is an XDR parsing error
+        if (error.message?.includes('XDR_PARSING_ERROR')) {
+          console.warn('[App] XDR parsing error when checking admin - SDK may be incompatible with contract format');
+          xdrError = true;
+          alert(
+            'Warning: Unable to read contract data due to XDR format mismatch.\n\n' +
+            'This usually means:\n' +
+            '1. The Stellar SDK version is incompatible with the contract\n' +
+            '2. The contract format has changed\n\n' +
+            'Please update your dependencies or contact support.\n\n' +
+            'The app will continue but some features may not work correctly.'
+          );
+        } else {
+          throw error; // Re-throw other errors
+        }
+      }
+      
       const publicKey = await wallet.getPublicKey();
       console.log('[App] Admin from contract:', admin, typeof admin);
       console.log('[App] Current wallet public key:', publicKey);
+      
+      // If we got an XDR error, don't try to initialize (it would also fail)
+      // Check localStorage for previously verified admin status
+      if (xdrError) {
+        console.warn('[App] Cannot determine admin status due to XDR parsing error - checking localStorage');
+        const stored = localStorage.getItem('geotrust_isAdmin');
+        const storedAddress = localStorage.getItem('geotrust_adminAddress');
+        if (stored === 'true' && storedAddress === publicKey) {
+          console.log('[App] Restoring admin status from localStorage');
+          setIsAdmin(true);
+          return;
+        }
+        // If no stored admin status, check if this is a known admin address (hardcoded for XDR error recovery)
+        // Known admin address: GDPMUX3X4AXOFWMWW74IOAM4ZM4VHOPJS6ZVXYNENSE447MQSXKJ5OGA
+        const knownAdminAddresses = [
+          'GDPMUX3X4AXOFWMWW74IOAM4ZM4VHOPJS6ZVXYNENSE447MQSXKJ5OGA',
+          'GDJMPSG63NX546H2XSPKFQYIJVM46DCA6MUM2NPEOAZJ7WKY6ZZ64GQM' // Previous admin
+        ];
+        if (knownAdminAddresses.includes(publicKey)) {
+          console.log('[App] Wallet matches known admin address - setting admin status');
+          setIsAdmin(true);
+          localStorage.setItem('geotrust_isAdmin', 'true');
+          localStorage.setItem('geotrust_adminAddress', publicKey);
+          return;
+        }
+        // If no stored admin status and not a known admin, preserve current state
+        console.warn('[App] No stored admin status found - preserving current admin status');
+        return;
+      }
       
       // Normalize admin to string for comparison
       const adminStr = admin ? String(admin) : null;
@@ -1473,7 +2257,7 @@ const App: React.FC = () => {
         if (shouldInit) {
           try {
             await contractClient.init(publicKey, false); // default_allow_all = false
-            console.log('[App] Γ£à Contract initialized successfully');
+            console.log('[App] ✅ Contract initialized successfully');
             // Retry admin check after initialization (wait longer for transaction to settle)
             setTimeout(() => {
               console.log('[App] Re-checking admin status after initialization...');
@@ -1481,7 +2265,15 @@ const App: React.FC = () => {
             }, 3000);
           } catch (error: any) {
             console.error('[App] Failed to initialize contract:', error);
-            alert(`Failed to initialize contract: ${error.message || error}`);
+            // Check if initialization also failed with XDR error
+            if (error.message?.includes('XDR_PARSING_ERROR') || error.message?.includes('XDR format error')) {
+              alert(
+                'Failed to initialize contract due to XDR format mismatch.\n\n' +
+                'This indicates an SDK compatibility issue. Please update your dependencies.'
+              );
+            } else {
+              alert(`Failed to initialize contract: ${error.message || error}`);
+            }
           }
         }
         return;
@@ -1489,7 +2281,10 @@ const App: React.FC = () => {
       
       if (adminStr === publicKey) {
         setIsAdmin(true);
-        console.log('[App] Γ£à Admin status confirmed, setting up contracts...');
+        // Store admin status in localStorage for XDR error recovery
+        localStorage.setItem('geotrust_isAdmin', 'true');
+        localStorage.setItem('geotrust_adminAddress', publicKey);
+        console.log('[App] ✅ Admin status confirmed, setting up contracts...');
         
         // Automatically set verifier contract ID if available in env
         const verifierId = process.env.REACT_APP_VERIFIER_ID;
@@ -1586,7 +2381,10 @@ const App: React.FC = () => {
         }
       } else {
         setIsAdmin(false);
-        console.log('[App] Γ¥î User is not admin. Admin:', admin, 'User:', publicKey);
+        // Clear stored admin status
+        localStorage.removeItem('geotrust_isAdmin');
+        localStorage.removeItem('geotrust_adminAddress');
+        console.log('[App] ❌ User is not admin. Admin:', admin, 'User:', publicKey);
       }
     } catch (error) {
       console.error('Failed to check admin status:', error);
@@ -1599,22 +2397,47 @@ const App: React.FC = () => {
     if (!client) return;
 
     try {
-      const [defaultAllow, allowedCount] = await (client as any).getCountryPolicy();
+      const policyResult = await (client as any).getCountryPolicy();
+      // Check if result is valid array
+      if (!Array.isArray(policyResult) || policyResult.length < 2) {
+        throw new Error('XDR_PARSING_ERROR:get_country_policy returned invalid result');
+      }
+      const [defaultAllow, allowedCount] = policyResult;
       setDefaultAllowAll(defaultAllow);
 
-      // Fetch allowed countries with pagination
-      const pageSize = 100;
-      const pages = Math.ceil(allowedCount / pageSize);
-      const allAllowed = new Set<number>();
+      // Fetch allowed countries with pagination (only if allowedCount is valid)
+      if (typeof allowedCount === 'number' && allowedCount > 0) {
+        try {
+          const pageSize = 100;
+          const pages = Math.ceil(allowedCount / pageSize);
+          const allAllowed = new Set<number>();
 
-      for (let page = 0; page < pages; page++) {
-        const countries = await (client as any).listAllowedCountries(page, pageSize);
-        countries.forEach((code: number) => allAllowed.add(code));
+          for (let page = 0; page < pages; page++) {
+            const countries = await (client as any).listAllowedCountries(page, pageSize);
+            if (Array.isArray(countries)) {
+              countries.forEach((code: number) => allAllowed.add(code));
+            }
+          }
+
+          setAllowedCountries(allAllowed);
+        } catch (listError: any) {
+          // If listing countries fails, just use empty set
+          console.warn('[App] Failed to list allowed countries:', listError);
+          setAllowedCountries(new Set());
+        }
+      } else {
+        setAllowedCountries(new Set());
       }
-
-      setAllowedCountries(allAllowed);
-    } catch (error) {
-      console.error('Failed to fetch country policy:', error);
+    } catch (error: any) {
+      // Check if this is an XDR parsing error
+      if (error.message?.includes('XDR_PARSING_ERROR')) {
+        console.warn('[App] XDR parsing error when fetching country policy - SDK may be incompatible');
+        // Set defaults to allow app to continue
+        setDefaultAllowAll(false);
+        setAllowedCountries(new Set());
+      } else {
+        console.error('Failed to fetch country policy:', error);
+      }
     }
   };
 
@@ -1834,7 +2657,7 @@ const App: React.FC = () => {
   };
 
   const [selectedMarker, setSelectedMarker] = useState<{
-    type: 'player' | 'opponent';
+    type: 'player' | 'opponent' | 'nft' | 'contract';
     location: [number, number];
     userId?: string;
     publicKey?: string;
@@ -1842,6 +2665,8 @@ const App: React.FC = () => {
     sessionId?: number;
     cellId?: number;
     country?: number;
+    nft?: NearbyNFT;
+    contract?: NearbyContract;
   } | null>(null);
 
   const createMarkerElement = (type: 'player' | 'opponent', onClick?: () => void): HTMLElement => {
@@ -1895,26 +2720,29 @@ const App: React.FC = () => {
     <div className="App">
       <div ref={mapContainer} className="map-container" />
       
-      {/* Stellar Logo - Top Right Corner */}
-      <div style={{
-        position: 'absolute',
-        top: '16px',
-        right: '16px',
-        zIndex: 1000,
-        pointerEvents: 'none'
-      }}>
-        <img 
-          src="/images/Stellar_Logo.png" 
-          alt="Stellar" 
-          style={{ 
-            height: '48px', 
-            width: 'auto',
-            maxWidth: '200px',
-            objectFit: 'contain',
-            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
-          }} 
-        />
-      </div>
+      {/* Stellar Logo - Top Left Corner, visible only when zoomed out */}
+      {mapZoom <= 4 && (
+        <div style={{
+          position: 'absolute',
+          top: '16px',
+          left: '16px',
+          zIndex: 1000,
+          pointerEvents: 'none',
+          transition: 'opacity 0.3s ease-in-out'
+        }}>
+          <img 
+            src="/images/Stellar_Logo.png" 
+            alt="Stellar" 
+            style={{ 
+              height: '48px', 
+              width: 'auto',
+              maxWidth: '200px',
+              objectFit: 'contain',
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
+            }} 
+          />
+        </div>
+      )}
       
       <div className={`overlay ${overlayMinimized && wallet ? 'minimized' : ''} ${!wallet ? 'no-wallet' : ''}`}>
         <div className="overlay-header">
@@ -2296,9 +3124,105 @@ const App: React.FC = () => {
         <div className="marker-popup-overlay" onClick={() => setSelectedMarker(null)}>
           <div className="marker-popup" onClick={(e) => e.stopPropagation()}>
             <button className="marker-popup-close" onClick={() => setSelectedMarker(null)}>×</button>
-            <h3>{selectedMarker.type === 'player' ? 'Your Profile' : 'Player Profile'}</h3>
+            <h3>
+              {selectedMarker.type === 'player' ? 'Your Profile' : 
+               selectedMarker.type === 'nft' ? 'NFT Details' : 
+               selectedMarker.type === 'contract' ? 'Smart Contract' :
+               'Player Profile'}
+            </h3>
             <div className="marker-popup-content">
-              {selectedMarker.publicKey && (
+              {selectedMarker.type === 'nft' && selectedMarker.nft && (
+                <>
+                  <div className="marker-popup-field">
+                    <label>Collection:</label>
+                    <span>{selectedMarker.nft.collection_name || selectedMarker.nft.name || 'Unknown NFT'}</span>
+                  </div>
+                  {selectedMarker.nft.description && (
+                    <div className="marker-popup-field">
+                      <label>Description:</label>
+                      <span>{selectedMarker.nft.description}</span>
+                    </div>
+                  )}
+                  {selectedMarker.nft.distance && (
+                    <div className="marker-popup-field">
+                      <label>Distance:</label>
+                      <span>{selectedMarker.nft.distance.toFixed(1)}m away</span>
+                    </div>
+                  )}
+                  {(selectedMarker.nft.contract_address || selectedMarker.nft.token_id) && (
+                    <div className="marker-popup-field">
+                      <label>Contract:</label>
+                      <span style={{ fontFamily: 'Courier New', fontSize: '11px', wordBreak: 'break-all' }}>
+                        {selectedMarker.nft.contract_address || 'N/A'}
+                        {selectedMarker.nft.token_id && ` #${selectedMarker.nft.token_id}`}
+                      </span>
+                    </div>
+                  )}
+                  <div className="marker-popup-field" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+                    <div style={{ 
+                      width: '100%', 
+                      height: '200px', 
+                      backgroundImage: `url(${constructImageUrl(selectedMarker.nft.server_url, selectedMarker.nft.ipfs_hash) || selectedMarker.nft.image_url || 'https://via.placeholder.com/200x200?text=NFT'})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      borderRadius: '8px',
+                      border: '2px solid #FFD700'
+                    }} />
+                  </div>
+                </>
+              )}
+              {selectedMarker.type === 'contract' && selectedMarker.contract && (
+                <>
+                  <div className="marker-popup-field">
+                    <label>Contract Name:</label>
+                    <span>{selectedMarker.contract.name || 'Unknown Contract'}</span>
+                  </div>
+                  {selectedMarker.contract.description && (
+                    <div className="marker-popup-field">
+                      <label>Description:</label>
+                      <span>{selectedMarker.contract.description}</span>
+                    </div>
+                  )}
+                  <div className="marker-popup-field">
+                    <label>Contract Address:</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontFamily: 'Courier New', fontSize: '11px', wordBreak: 'break-all' }}>
+                        {selectedMarker.contract.contract_address}
+                      </span>
+                      <button
+                        className="icon-button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedMarker.contract!.contract_address);
+                          alert('Contract address copied to clipboard!');
+                        }}
+                        title="Copy Contract Address"
+                        style={{ fontSize: '12px', padding: '4px 8px', flexShrink: 0 }}
+                      >
+                        📋 Copy
+                      </button>
+                    </div>
+                  </div>
+                  {selectedMarker.contract.distance && (
+                    <div className="marker-popup-field">
+                      <label>Distance:</label>
+                      <span>{selectedMarker.contract.distance.toFixed(1)}m away</span>
+                    </div>
+                  )}
+                  {selectedMarker.contract.functions && selectedMarker.contract.functions.length > 0 && (
+                    <div className="marker-popup-field">
+                      <label>Functions:</label>
+                      <div style={{ maxHeight: '100px', overflowY: 'auto', fontSize: '11px' }}>
+                        {selectedMarker.contract.functions.map((func: any, idx: number) => (
+                          <div key={idx} style={{ padding: '4px', backgroundColor: '#f0f0f0', borderRadius: '4px', marginBottom: '2px' }}>
+                            {func.name || func}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+              {selectedMarker.publicKey && selectedMarker.type !== 'nft' && selectedMarker.type !== 'contract' && (
                 <div className="marker-popup-field">
                   <label>Public Key:</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -2321,7 +3245,17 @@ const App: React.FC = () => {
               )}
               <div className="marker-popup-field">
                 <label>Location:</label>
-                <span>{selectedMarker.location[1].toFixed(4)}, {selectedMarker.location[0].toFixed(4)}</span>
+                <span>
+                  {(() => {
+                    const lat = typeof selectedMarker.location[1] === 'number' 
+                      ? selectedMarker.location[1] 
+                      : Number(selectedMarker.location[1]) || 0;
+                    const lng = typeof selectedMarker.location[0] === 'number' 
+                      ? selectedMarker.location[0] 
+                      : Number(selectedMarker.location[0]) || 0;
+                    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                  })()}
+                </span>
               </div>
               {selectedMarker.distance !== undefined && (
                 <div className="marker-popup-field">
