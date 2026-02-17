@@ -112,21 +112,21 @@ class GeoLinkApiClient {
     const url = `${this.baseUrl}${endpoint}`;
     const apiKey = useWalletProviderKey ? this.walletProviderKey : this.dataConsumerKey;
     
-    // Build headers object - match xyz-wallet pattern exactly
-    // xyz-wallet sets headers directly: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' }
+    // Match xyz-wallet pattern exactly - set headers directly in fetch call
+    // xyz-wallet uses: headers: { 'X-API-Key': this.walletProviderKey, 'Content-Type': 'application/json' }
+    if (!apiKey || apiKey.trim().length === 0) {
+      const keyType = useWalletProviderKey ? 'WalletProvider' : 'DataConsumer';
+      console.error(`[GeoLinkAPI] No ${keyType} API key available for ${endpoint}`);
+      console.error(`[GeoLinkAPI] WalletProviderKey: ${this.walletProviderKey ? 'SET (' + this.walletProviderKey.length + ' chars)' : 'NOT SET'}`);
+      console.error(`[GeoLinkAPI] DataConsumerKey: ${this.dataConsumerKey ? 'SET (' + this.dataConsumerKey.length + ' chars)' : 'NOT SET'}`);
+      throw new Error(`API key required or invalid`);
+    }
+
+    // Build headers exactly like xyz-wallet - set directly without merging
     const headers: Record<string, string> = {
+      'X-API-Key': apiKey.trim(),
       'Content-Type': 'application/json',
     };
-
-    // Add X-API-Key header if available (match xyz-wallet format exactly)
-    if (apiKey && apiKey.trim().length > 0) {
-      headers['X-API-Key'] = apiKey.trim();
-    } else {
-      const keyType = useWalletProviderKey ? 'WalletProvider' : 'DataConsumer';
-      console.warn(`[GeoLinkAPI] No ${keyType} API key available for ${endpoint}`);
-      console.warn(`[GeoLinkAPI] WalletProviderKey: ${this.walletProviderKey ? 'SET (' + this.walletProviderKey.length + ' chars)' : 'NOT SET'}`);
-      console.warn(`[GeoLinkAPI] DataConsumerKey: ${this.dataConsumerKey ? 'SET (' + this.dataConsumerKey.length + ' chars)' : 'NOT SET'}`);
-    }
 
     // Merge any additional headers from options (but don't override X-API-Key or Content-Type)
     if (options.headers) {
@@ -143,30 +143,55 @@ class GeoLinkApiClient {
     console.log(`[GeoLinkAPI] Request to ${endpoint}:`, {
       url,
       method: options.method || 'GET',
-      hasApiKey: !!(apiKey && apiKey.trim().length > 0),
-      apiKeyPreview: apiKey ? `${apiKey.substring(0, 8)}...` : 'MISSING',
+      hasApiKey: true,
+      apiKeyLength: apiKey.trim().length,
+      apiKeyPreview: `${apiKey.trim().substring(0, 8)}...${apiKey.trim().substring(apiKey.trim().length - 4)}`,
       useWalletProviderKey,
+      headersKeys: Object.keys(headers),
     });
 
     try {
-      const response = await fetch(url, {
+      // Create fetch options - ensure headers are set correctly
+      const fetchOptions: RequestInit = {
         ...options,
-        headers,
-      });
+        headers: headers, // Explicitly set headers (don't merge with options.headers)
+      };
+
+      const response = await fetch(url, fetchOptions);
 
       if (!response.ok) {
         // Try to get error message from response
         let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+        let errorDetails: any = null;
         try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || errorMessage;
+          errorDetails = await response.json();
+          errorMessage = errorDetails.error || errorDetails.message || errorMessage;
         } catch {
-          // If JSON parsing fails, use status text
+          // If JSON parsing fails, try to get text
+          try {
+            const text = await response.text();
+            if (text) errorMessage = text;
+          } catch {
+            // If text parsing also fails, use status text
+          }
         }
+        
+        // Log detailed error information
+        console.error(`[GeoLinkAPI] Request failed for ${endpoint}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          errorMessage,
+          errorDetails,
+          url,
+          method: options.method || 'GET',
+          apiKeyLength: apiKey.trim().length,
+          apiKeyPreview: `${apiKey.trim().substring(0, 4)}...${apiKey.trim().substring(apiKey.trim().length - 4)}`,
+          useWalletProviderKey,
+        });
         
         // Special handling for 401 (Unauthorized)
         if (response.status === 401) {
-          errorMessage = 'API key required or invalid';
+          errorMessage = `API key required or invalid. Check that REACT_APP_GEOLINK_${useWalletProviderKey ? 'WALLET_PROVIDER' : 'DATA_CONSUMER'}_KEY is set correctly.`;
         }
         
         // Special handling for 404 (Not Found)
