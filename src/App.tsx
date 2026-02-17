@@ -887,15 +887,61 @@ const App: React.FC = () => {
     if (!showOtherUsers || !playerLoc) return;
     
     try {
-      // Fetch nearby users from GeoLink API
-      const nearbyUsers = await geolinkApi.getNearbyUsers(
-        playerLoc[1], // latitude
-        playerLoc[0], // longitude
-        maxDistance * 1000 // convert km to meters
-      );
+      // Get users from active sessions (like xyz-wallet gets from their backend)
+      // This shows other players who are in active sessions
+      const sessionUsers: Array<{
+        id: string;
+        location: [number, number];
+        distance: number;
+        publicKey: string;
+        sessionId: number;
+        sessionState: string;
+      }> = [];
       
-      // Convert to our format
-      const formattedUsers = nearbyUsers.map((user: NearbyUser) => ({
+      // Get users from active sessions
+      for (const session of activeSessions) {
+        if (session.player1 && session.player1 !== walletAddress) {
+          // Get location from session cell_id if available, or use approximate location
+          // For now, we'll use the player's current location as approximation
+          // In future, we could store actual locations in session or fetch from GeoLink
+          const distance = 0; // Will be calculated if we have actual locations
+          sessionUsers.push({
+            id: session.player1,
+            location: playerLoc, // Placeholder - would need actual location from GeoLink or session
+            distance,
+            publicKey: session.player1,
+            sessionId: session.sessionId,
+            sessionState: session.state,
+          });
+        }
+        if (session.player2 && session.player2 !== walletAddress) {
+          const distance = 0;
+          sessionUsers.push({
+            id: session.player2,
+            location: playerLoc, // Placeholder
+            distance,
+            publicKey: session.player2,
+            sessionId: session.sessionId,
+            sessionState: session.state,
+          });
+        }
+      }
+      
+      // Also try to fetch from GeoLink API (may not be available)
+      let geolinkUsers: NearbyUser[] = [];
+      try {
+        geolinkUsers = await geolinkApi.getNearbyUsers(
+          playerLoc[1], // latitude
+          playerLoc[0], // longitude
+          maxDistance * 1000 // convert km to meters
+        );
+      } catch (error) {
+        // GeoLink nearby users endpoint may not exist - that's OK
+        console.log('[App] GeoLink nearby users not available, using session users only');
+      }
+      
+      // Convert GeoLink users to our format
+      const formattedGeolinkUsers = geolinkUsers.map((user: NearbyUser) => ({
         id: user.public_key,
         location: [user.longitude, user.latitude] as [number, number],
         distance: user.distance / 1000, // convert meters to km
@@ -904,38 +950,73 @@ const App: React.FC = () => {
         description: user.description,
       }));
       
-      setOtherUsers(formattedUsers);
+      // Combine session users and GeoLink users, removing duplicates
+      const allUsers = [...sessionUsers, ...formattedGeolinkUsers];
+      const uniqueUsers = allUsers.filter((user, index, self) => 
+        index === self.findIndex(u => u.publicKey === user.publicKey)
+      );
+      
+      setOtherUsers(uniqueUsers);
       
       // Also fetch nearby NFTs and contracts
       const [nfts, contracts] = await Promise.all([
-        geolinkApi.getNearbyNFTs(playerLoc[1], playerLoc[0], maxDistance * 1000),
-        geolinkApi.getNearbyContracts(playerLoc[1], playerLoc[0], maxDistance * 1000),
+        geolinkApi.getNearbyNFTs(playerLoc[1], playerLoc[0], maxDistance * 1000).catch(() => []),
+        geolinkApi.getNearbyContracts(playerLoc[1], playerLoc[0], maxDistance * 1000).catch(() => []),
       ]);
       
       setNearbyNFTs(nfts);
       setNearbyContracts(contracts);
       
-      console.log('[App] Fetched from GeoLink:', { 
-        users: formattedUsers.length, 
+      console.log('[App] Fetched nearby users:', { 
+        fromSessions: sessionUsers.length,
+        fromGeoLink: formattedGeolinkUsers.length,
+        total: uniqueUsers.length,
         nfts: nfts.length, 
         contracts: contracts.length 
       });
       
       // Update markers on map
-      updateOtherUserMarkers(formattedUsers);
+      updateOtherUserMarkers(uniqueUsers);
     } catch (error) {
-      console.error('[App] Failed to fetch nearby users from GeoLink:', error);
+      console.error('[App] Failed to fetch nearby users:', error);
       // Fallback to empty array on error
       setOtherUsers([]);
     }
-  }, [showOtherUsers, maxDistance, updateOtherUserMarkers]);
+  }, [showOtherUsers, maxDistance, updateOtherUserMarkers, activeSessions, walletAddress]);
 
-  // Fetch nearby users, NFTs, and contracts when location changes
+  // Fetch nearby users, NFTs, and contracts when location changes or active sessions update
   useEffect(() => {
     if (playerLocation && showOtherUsers) {
       fetchOtherUsers(playerLocation);
     }
-  }, [playerLocation, showOtherUsers, fetchOtherUsers]);
+  }, [playerLocation, showOtherUsers, fetchOtherUsers, activeSessions]);
+  
+  // Monitor session state changes to detect when sessions end (end_game was called)
+  useEffect(() => {
+    if (!readOnlyClient || !userCurrentSession) return;
+    
+    const checkSessionState = async () => {
+      try {
+        const session = await readOnlyClient.getSession(userCurrentSession);
+        if (session && session.state === 'Ended') {
+          console.log('[App] Session ended - end_game was called on Game Hub:', userCurrentSession);
+          // Session has ended, could show notification or update UI
+          setUserCurrentSession(null);
+          setSessionLink('');
+          // Refresh sessions to update UI
+          await fetchActiveSessions();
+        }
+      } catch (error) {
+        // Session might not exist anymore
+        console.log('[App] Could not check session state:', error);
+      }
+    };
+    
+    // Check session state periodically
+    const interval = setInterval(checkSessionState, 10000); // Check every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [readOnlyClient, userCurrentSession, fetchActiveSessions]);
   
   // Fetch account balance when wallet is connected
   useEffect(() => {
@@ -1244,55 +1325,107 @@ const App: React.FC = () => {
             addPlayerMarker();
           }
 
-          // Get country code and create session
+          // Get country code and find/join existing session or create new one
           const countryCode = await getCountryCode(longitude, latitude);
           if (countryCode && contractClient) {
             try {
-              // Final check before creating session
+              // Final check before joining/creating session
               if (userCurrentSession !== null) {
-                console.log('[App] User joined a session while processing - skipping session creation');
+                console.log('[App] User joined a session while processing - skipping');
                 setIsCheckingIn(false);
                 return;
               }
 
               const cellId = calculateCellId(latitude, longitude);
               const assetTag = await getAssetTag();
-              console.log('[App] Creating session with:', { cellId, countryCode });
               
-              const sessionId = await contractClient.createSession();
-              console.log('[App] Session created, ID:', sessionId);
+              // First, try to find and join an existing Waiting session
+              let sessionId: number | null = null;
+              let joinedExisting = false;
               
-              // Note: Sessions are managed entirely on-chain, not in GeoLink
+              // Fetch active sessions to find a Waiting one
+              // Use readOnlyClient to avoid sequence number issues
+              if (readOnlyClient) {
+                try {
+                  // Poll recent sessions to find a Waiting one
+                  for (let checkId = 1; checkId <= 200; checkId++) {
+                    try {
+                      const session = await readOnlyClient.getSession(checkId);
+                      if (session && session.state === 'Waiting') {
+                        // Check if user is already in this session
+                        if (session.player1 === walletAddress || session.player2 === walletAddress) {
+                          continue;
+                        }
+                        // Check if session has space (not full)
+                        if (session.player1 && session.player2) {
+                          continue; // Session is full
+                        }
+                        
+                        // Found a waiting session to join!
+                        sessionId = checkId;
+                        console.log('[App] Found waiting session, joining:', sessionId);
+                        
+                        try {
+                          await contractClient.joinSession(
+                            sessionId, 
+                            cellId, 
+                            assetTag, 
+                            countryCode
+                          );
+                          joinedExisting = true;
+                          console.log('[App] ✅ Joined existing session:', sessionId);
+                          
+                          // If this was the 2nd player, start_game should have been called by the contract
+                          if (session.player1) {
+                            console.log('[App] This was the 2nd player - start_game should have been called on Game Hub');
+                          }
+                          break; // Successfully joined, exit loop
+                        } catch (joinError: any) {
+                          console.warn('[App] Failed to join session', sessionId, ':', joinError);
+                          // Continue searching for another session
+                          sessionId = null;
+                          continue;
+                        }
+                      }
+                    } catch (error) {
+                      // Session doesn't exist or error - continue searching
+                      continue;
+                    }
+                  }
+                } catch (error) {
+                  console.warn('[App] Error searching for waiting sessions:', error);
+                }
+              }
               
-              // Additional delay to ensure session is fully persisted and account sequence is refreshed
-              // Wait for transaction to be included and then wait a bit more for ledger state to settle
-              await new Promise(resolve => setTimeout(resolve, 5000));
+              // If no waiting session found or join failed, create a new one
+              if (!joinedExisting) {
+                console.log('[App] No waiting session found, creating new session with:', { cellId, countryCode });
+                sessionId = await contractClient.createSession();
+                console.log('[App] Session created, ID:', sessionId);
+                
+                // Wait for transaction to be included
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                console.log('[App] Joining newly created session:', { sessionId, cellId, countryCode });
+                
+                await contractClient.joinSession(
+                  sessionId, 
+                  cellId, 
+                  assetTag, 
+                  countryCode
+                );
+                console.log('[App] ✅ Joined newly created session:', sessionId);
+              }
               
-              console.log('[App] Joining session:', { sessionId, cellId, countryCode });
-
-              // For MVP, temporarily skip proof to test basic flow
-              // TODO: Re-enable proof once struct deserialization is fixed
-              // const { generateLocationProof } = await import('./zk-proof');
-              // const locationProof = await generateLocationProof(latitude, longitude);
-              
-              await contractClient.joinSession(
-                sessionId, 
-                cellId, 
-                assetTag, 
-                countryCode
-                // Temporarily disabled proof
-                // {
-                //   proof: locationProof.proof,
-                //   publicInputs: [locationProof.publicInputs.cellId, locationProof.publicInputs.gridSize]
-                // }
-              );
-              setSessionLink(`${window.location.origin}?session=${sessionId}`);
-              
-              // Refresh active sessions to update UI
-              await fetchActiveSessions();
-              
-              // Fetch other users after checkin
-              fetchOtherUsers([longitude, latitude]);
+              if (sessionId) {
+                setSessionLink(`${window.location.origin}?session=${sessionId}`);
+                
+                // Refresh active sessions to update UI
+                await fetchActiveSessions();
+                
+                // Fetch other users after checkin
+                fetchOtherUsers([longitude, latitude]);
+              }
             } catch (error: any) {
               if (error.message?.includes('rejected') || error.message?.includes('denied')) {
                 // User rejected transaction - this is expected, don't show error
