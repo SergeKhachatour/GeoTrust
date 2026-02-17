@@ -111,16 +111,42 @@ class GeoLinkApiClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const apiKey = useWalletProviderKey ? this.walletProviderKey : this.dataConsumerKey;
+    
+    // Build headers object - match xyz-wallet pattern exactly
+    // xyz-wallet sets headers directly: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' }
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string> || {}),
     };
 
-    if (apiKey) {
-      headers['X-API-Key'] = apiKey;
+    // Add X-API-Key header if available (match xyz-wallet format exactly)
+    if (apiKey && apiKey.trim().length > 0) {
+      headers['X-API-Key'] = apiKey.trim();
     } else {
-      console.warn(`[GeoLinkAPI] No API key available for ${endpoint} (useWalletProviderKey: ${useWalletProviderKey})`);
+      const keyType = useWalletProviderKey ? 'WalletProvider' : 'DataConsumer';
+      console.warn(`[GeoLinkAPI] No ${keyType} API key available for ${endpoint}`);
+      console.warn(`[GeoLinkAPI] WalletProviderKey: ${this.walletProviderKey ? 'SET (' + this.walletProviderKey.length + ' chars)' : 'NOT SET'}`);
+      console.warn(`[GeoLinkAPI] DataConsumerKey: ${this.dataConsumerKey ? 'SET (' + this.dataConsumerKey.length + ' chars)' : 'NOT SET'}`);
     }
+
+    // Merge any additional headers from options (but don't override X-API-Key or Content-Type)
+    if (options.headers) {
+      const additionalHeaders = options.headers as Record<string, string>;
+      Object.keys(additionalHeaders).forEach(key => {
+        const lowerKey = key.toLowerCase();
+        if (lowerKey !== 'x-api-key' && lowerKey !== 'content-type') {
+          headers[key] = additionalHeaders[key];
+        }
+      });
+    }
+
+    // Debug logging (similar to xyz-wallet)
+    console.log(`[GeoLinkAPI] Request to ${endpoint}:`, {
+      url,
+      method: options.method || 'GET',
+      hasApiKey: !!(apiKey && apiKey.trim().length > 0),
+      apiKeyPreview: apiKey ? `${apiKey.substring(0, 8)}...` : 'MISSING',
+      useWalletProviderKey,
+    });
 
     try {
       const response = await fetch(url, {
