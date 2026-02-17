@@ -1895,6 +1895,27 @@ const App: React.FC = () => {
     <div className="App">
       <div ref={mapContainer} className="map-container" />
       
+      {/* Stellar Logo - Top Right Corner */}
+      <div style={{
+        position: 'absolute',
+        top: '16px',
+        right: '16px',
+        zIndex: 1000,
+        pointerEvents: 'none'
+      }}>
+        <img 
+          src="/images/Stellar_Logo.png" 
+          alt="Stellar" 
+          style={{ 
+            height: '48px', 
+            width: 'auto',
+            maxWidth: '200px',
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
+          }} 
+        />
+      </div>
+      
       <div className={`overlay ${overlayMinimized && wallet ? 'minimized' : ''} ${!wallet ? 'no-wallet' : ''}`}>
         <div className="overlay-header">
           {wallet && walletAddress && (
@@ -1995,19 +2016,6 @@ const App: React.FC = () => {
               </div>
             ) : !wallet ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {/* Stellar Logo */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
-                  <img 
-                    src="/images/Stellar_Logo.png" 
-                    alt="Stellar" 
-                    style={{ 
-                      height: '48px', 
-                      width: 'auto',
-                      maxWidth: '200px',
-                      objectFit: 'contain'
-                    }} 
-                  />
-                </div>
                 <button className="primary-button" onClick={connectWallet} style={{ width: '100%' }}>
                   {isCheckingIn ? (
                     <>
