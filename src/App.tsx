@@ -266,8 +266,6 @@ const App: React.FC = () => {
   const contractMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const contractCirclesRef = useRef<string[]>([]);
   const userCirclesRef = useRef<string[]>([]);
-  const [selectedNFT, setSelectedNFT] = useState<NearbyNFT | null>(null);
-  const [selectedContract, setSelectedContract] = useState<NearbyContract | null>(null);
 
   // Define updateCountryOverlay first (used by loadCountryOverlay)
   const updateCountryOverlay = useCallback(() => {
@@ -540,7 +538,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Failed to load countries GeoJSON:', error);
     }
-  }, [defaultAllowAll, allowedCountries, updateCountryOverlay]);
+  }, [defaultAllowAll, allowedCountries]);
 
   // Define initializeMap before the useEffect that uses it
   const initializeMap = useCallback((container: HTMLDivElement) => {
@@ -630,7 +628,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('[App] Failed to initialize map:', error);
     }
-  }, [loadCountryOverlay, updateCountryOverlay]); // Include loadCountryOverlay and updateCountryOverlay as dependencies
+  }, [loadCountryOverlay]);
 
   useEffect(() => {
     // Only initialize map once - if map already exists, don't re-initialize
@@ -1267,7 +1265,6 @@ const App: React.FC = () => {
           el.addEventListener('click', (e) => {
             e.stopPropagation();
             console.log('[App] NFT marker clicked:', nft);
-            setSelectedNFT(nft);
             setSelectedMarker({
               type: 'nft',
               location: [nft.longitude, nft.latitude],
@@ -1447,7 +1444,6 @@ const App: React.FC = () => {
           el.addEventListener('click', (e) => {
             e.stopPropagation();
             console.log('[App] Contract marker clicked:', contract);
-            setSelectedContract(contract);
             setSelectedMarker({
               type: 'contract',
               location: [lng, lat],
