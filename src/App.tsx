@@ -10,7 +10,7 @@ import { GamePanel } from './GamePanel';
 import { CollapsiblePanel } from './CollapsiblePanel';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 import { Horizon } from '@stellar/stellar-sdk';
-import { geolinkApi, NearbyUser, NearbyNFT, NearbyContract } from './services/geolinkApi';
+import { geolinkApi, NearbyNFT, NearbyContract } from './services/geolinkApi';
 
 // Helper function to construct NFT image URL (matching xyz-wallet exactly)
 function cleanServerUrl(serverUrl: string | null | undefined): string | null {
