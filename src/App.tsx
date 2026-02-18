@@ -427,11 +427,17 @@ const App: React.FC = () => {
   }, [defaultAllowAll, allowedCountries]);
 
   // Call updateCountryOverlay when defaultAllowAll or allowedCountries changes
-  // Only update if country data has been loaded to prevent race conditions
+  // Only update if country data has been loaded AND overlay source exists to prevent race conditions
   useEffect(() => {
-    // Don't update if data hasn't been loaded yet
+    // Don't update if data hasn't been loaded yet OR if overlay source doesn't exist
     if (!countryDataLoaded) {
       console.log('[App] Country data not loaded yet, skipping overlay update');
+      return;
+    }
+    
+    // Don't update if overlay source doesn't exist yet
+    if (!map.current || !map.current.getSource('countries')) {
+      console.log('[App] Countries source not ready yet, skipping overlay update');
       return;
     }
     
@@ -459,23 +465,30 @@ const App: React.FC = () => {
           styleLoaded: map.current?.isStyleLoaded()
         });
       }
-    }, 500); // Increased delay to ensure React state has fully updated and propagated
+    }, 800); // Longer delay to ensure React state has fully updated and propagated
     return () => clearTimeout(timer);
   }, [defaultAllowAll, allowedCountries, updateCountryOverlay, countryDataLoaded]);
 
   // Also update overlay when countryDataLoaded becomes true (for initial load)
+  // But only if defaultAllowAll and allowedCountries have been set (not at initial values)
   useEffect(() => {
     if (countryDataLoaded && map.current && map.current.getSource('countries')) {
-      console.log('[App] Country data just loaded, updating overlay');
-      // Use a small delay to ensure state has propagated
+      // Check if we have actual data (not just initial values)
+      // If defaultAllowAll is false and allowedCountries is empty, we might still be loading
+      // Wait a bit more to ensure state has propagated
       const timer = setTimeout(() => {
         if (map.current && map.current.getSource('countries')) {
+          console.log('[App] Country data just loaded, updating overlay', {
+            defaultAllowAll,
+            allowedCount: allowedCountries.size,
+            countryDataLoaded
+          });
           updateCountryOverlay();
         }
-      }, 300);
+      }, 1000); // Longer delay to ensure state has fully propagated
       return () => clearTimeout(timer);
     }
-  }, [countryDataLoaded, updateCountryOverlay]);
+  }, [countryDataLoaded, updateCountryOverlay, defaultAllowAll, allowedCountries]);
 
   // Define loadCountryOverlay (uses updateCountryOverlay)
   const loadCountryOverlay = useCallback(async () => {
@@ -610,7 +623,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Failed to load countries GeoJSON:', error);
     }
-  }, [defaultAllowAll, allowedCountries]);
+  }, []); // No dependencies - this function only loads the GeoJSON, doesn't use state
 
   // Define initializeMap before the useEffect that uses it
   const initializeMap = useCallback((container: HTMLDivElement) => {
@@ -798,7 +811,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('[App] Failed to initialize map:', error);
     }
-  }, [loadCountryOverlay]);
+  }, [loadCountryOverlay, mapStyle, pitch, bearing, updateCountryOverlay]);
 
   useEffect(() => {
     // Only initialize map once - if map already exists, don't re-initialize
@@ -1100,12 +1113,12 @@ const App: React.FC = () => {
             console.log('[App] Successfully loaded', listResult.length, 'allowed countries');
             setAllowedCountries(new Set(listResult));
             countriesLoaded = true;
-            setCountryDataLoaded(true); // Mark data as loaded
+            // Don't set countryDataLoaded here - wait until after state updates
           } else {
             console.log('[App] No allowed countries in list (empty array)');
             setAllowedCountries(new Set());
             countriesLoaded = true; // Still mark as loaded, just empty
-            setCountryDataLoaded(true); // Mark data as loaded
+            // Don't set countryDataLoaded here - wait until after state updates
           }
         } else if (listResult === null) {
           // XDR parsing error - contract client now returns null gracefully
@@ -1115,6 +1128,10 @@ const App: React.FC = () => {
             console.log('[App] Could not load country policy or list - defaulting to show all countries');
             setDefaultAllowAll(true);
             setAllowedCountries(new Set());
+            // Mark data as loaded after state update
+            setTimeout(() => {
+              setCountryDataLoaded(true);
+            }, 300);
           }
         } else {
           console.warn('[App] listAllowedCountries returned non-array result:', listResult);
@@ -1124,6 +1141,10 @@ const App: React.FC = () => {
             console.log('[App] Could not load country policy or list - defaulting to show all countries');
             setDefaultAllowAll(true);
             setAllowedCountries(new Set());
+            // Mark data as loaded after state update
+            setTimeout(() => {
+              setCountryDataLoaded(true);
+            }, 300);
           }
         }
       } catch (listError: any) {
@@ -1141,8 +1162,10 @@ const App: React.FC = () => {
             console.log('[App] Could not load country policy or list - defaulting to show all countries');
             setDefaultAllowAll(true);
             setAllowedCountries(new Set());
-            setCountryDataLoaded(true); // Mark data as loaded even if we defaulted
-            // The useEffect that watches defaultAllowAll and allowedCountries will automatically call updateCountryOverlay
+            // Mark data as loaded after state update
+            setTimeout(() => {
+              setCountryDataLoaded(true);
+            }, 200);
         }
       }
       
@@ -1156,32 +1179,16 @@ const App: React.FC = () => {
         note: 'State will update asynchronously - will trigger updateCountryOverlay when ready'
       });
       
-      // Mark data as loaded - this will trigger the useEffect to update overlay
-      setCountryDataLoaded(true);
-      
-      // Explicitly update overlay after data is loaded and state has updated
-      // Use a longer delay to ensure React state has fully propagated
+      // Mark data as loaded AFTER a delay to ensure state has propagated
+      // The useEffect that watches defaultAllowAll and allowedCountries will call updateCountryOverlay
+      // when those values change, so we don't need to call it explicitly here
       setTimeout(() => {
-        if (map.current && map.current.getSource('countries')) {
-          console.log('[App] Explicitly updating country overlay after data load', {
-            defaultAllowAll,
-            allowedCount: allowedCountries.size
-          });
-          updateCountryOverlay();
-        } else {
-          console.log('[App] Countries source not ready yet, will update when map is ready');
-          // If overlay not ready, wait for it
-          const waitForOverlay = () => {
-            if (map.current && map.current.getSource('countries')) {
-              console.log('[App] Countries source now ready, updating overlay');
-              updateCountryOverlay();
-            } else if (map.current) {
-              setTimeout(waitForOverlay, 100);
-            }
-          };
-          waitForOverlay();
-        }
-      }, 600); // Delay to ensure state has fully updated
+        setCountryDataLoaded(true);
+        console.log('[App] Country data marked as loaded - useEffect will trigger overlay update', {
+          defaultAllowAll,
+          allowedCount: allowedCountries.size
+        });
+      }, 800); // Longer delay to ensure state updates are fully processed
     };
     
     loadData();
@@ -2570,16 +2577,18 @@ const App: React.FC = () => {
             // Wait a bit to ensure transaction is processed before next call
             await new Promise(resolve => setTimeout(resolve, 2000));
           } catch (error: any) {
-            console.error('[App] Failed to set verifier:', error);
             const errorMsg = error?.message || error?.toString() || 'Unknown error';
-            // Don't show alert for user rejections or sequence errors
+            // Don't log as error for user rejections - this is expected behavior
             if (errorMsg.includes('rejected by user') || errorMsg.includes('Transaction was rejected')) {
-              console.warn('[App] Verifier setup was cancelled by user - skipping Game Hub to avoid sequence issues');
+              console.log('[App] Verifier setup was cancelled by user - skipping Game Hub to avoid sequence issues');
               verifierRejected = true; // Mark as rejected to skip Game Hub
-            } else if (errorMsg.includes('txBadSeq') || errorMsg.includes('already') || errorMsg.includes('set')) {
-              console.warn('[App] Verifier may already be set or sequence issue - will retry later');
             } else {
-              console.warn('[App] Failed to set verifier (non-critical):', errorMsg);
+              console.error('[App] Failed to set verifier:', error);
+              if (errorMsg.includes('txBadSeq') || errorMsg.includes('already') || errorMsg.includes('set')) {
+                console.warn('[App] Verifier may already be set or sequence issue - will retry later');
+              } else {
+                console.warn('[App] Failed to set verifier (non-critical):', errorMsg);
+              }
             }
           }
         } else {
