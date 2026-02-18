@@ -21,7 +21,11 @@ export class ReadOnlyContractClient {
 
   constructor(contractId?: string) {
     this.network = Networks.TESTNET;
-    this.rpc = new rpc.Server('https://soroban-testnet.stellar.org');
+    // Allow RPC URL to be configured via environment variable for CORS proxy support
+    // Default to direct endpoint, but can use proxy like: https://corsproxy.io/?https://soroban-testnet.stellar.org
+    const rpcUrl = process.env.REACT_APP_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
+    this.rpc = new rpc.Server(rpcUrl);
+    console.log('[ReadOnlyContractClient] Using RPC URL:', rpcUrl);
     
     const NEW_CONTRACT_ID = 'CAW645ORVZG64DEOEC3XZ6DYJU56Y35ERVXX4QO6DNDTWDZS6ADONTPR';
     const OLD_CONTRACT_ID = 'CCEOUE46RT6QXZI4OHKWZBOCOKVHIN3SX7OFFGYUQHK3DEY7OOHY22TN';
