@@ -222,6 +222,7 @@ const App: React.FC = () => {
     return false;
   });
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [mainAdminAddress, setMainAdminAddress] = useState<string | null>(null);
   const [overlayMinimized, setOverlayMinimized] = useState(false);
   const [allowedCountries, setAllowedCountries] = useState<Set<number>>(new Set()); // u32 country codes
   const [defaultAllowAll, setDefaultAllowAll] = useState(false);
@@ -2526,6 +2527,9 @@ const App: React.FC = () => {
       // Normalize admin to string for comparison
       const adminStr = admin ? String(admin) : null;
       
+      // Store main admin address for country admin management
+      setMainAdminAddress(adminStr);
+      
       // If contract is not initialized (admin is null), prompt to initialize
       if (adminStr === null) {
         console.warn('[App] Contract not initialized. Please initialize the contract first.');
@@ -3752,6 +3756,8 @@ const App: React.FC = () => {
                         await checkAdminStatus();
                       }, 2000); // Wait 2 seconds for transaction to settle
                     }}
+                    walletAddress={walletAddress}
+                    mainAdminAddress={mainAdminAddress}
                   />
                 )}
               </>

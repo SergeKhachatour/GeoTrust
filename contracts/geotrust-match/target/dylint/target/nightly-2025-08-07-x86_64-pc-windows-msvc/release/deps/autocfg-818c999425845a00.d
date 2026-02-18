@@ -1,0 +1,10 @@
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\dylint/target\nightly-2025-08-07-x86_64-pc-windows-msvc\release\deps\autocfg-818c999425845a00.d: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\error.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\rustc.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\version.rs
+
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\dylint/target\nightly-2025-08-07-x86_64-pc-windows-msvc\release\deps\libautocfg-818c999425845a00.rlib: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\error.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\rustc.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\version.rs
+
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\dylint/target\nightly-2025-08-07-x86_64-pc-windows-msvc\release\deps\libautocfg-818c999425845a00.rmeta: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\error.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\rustc.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\version.rs
+
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\lib.rs:
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\error.rs:
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\rustc.rs:
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\autocfg-1.5.0\src\version.rs:

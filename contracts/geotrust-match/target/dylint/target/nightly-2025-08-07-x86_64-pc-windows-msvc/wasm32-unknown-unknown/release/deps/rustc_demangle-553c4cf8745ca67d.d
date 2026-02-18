@@ -1,0 +1,9 @@
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\dylint/target\nightly-2025-08-07-x86_64-pc-windows-msvc\wasm32-unknown-unknown\release\deps\rustc_demangle-553c4cf8745ca67d.d: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\legacy.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\v0.rs
+
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\dylint/target\nightly-2025-08-07-x86_64-pc-windows-msvc\wasm32-unknown-unknown\release\deps\librustc_demangle-553c4cf8745ca67d.rlib: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\legacy.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\v0.rs
+
+C:\Users\serge\OneDrive\Desktop\NodeJS\GeoTrust\contracts\geotrust-match\target\dylint/target\nightly-2025-08-07-x86_64-pc-windows-msvc\wasm32-unknown-unknown\release\deps\librustc_demangle-553c4cf8745ca67d.rmeta: C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\lib.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\legacy.rs C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\v0.rs
+
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\lib.rs:
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\legacy.rs:
+C:\Users\serge\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustc-demangle-0.1.26\src\v0.rs:

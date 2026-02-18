@@ -79,58 +79,96 @@ impl GeoTrustMatch {
             .set(&symbol_short!("DefAllow"), &default_allow_all);
     }
 
+    /// Get admin for a specific country (returns country admin if set, otherwise main admin)
+    fn get_admin_for_country(env: &Env, country: Option<u32>) -> Option<Address> {
+        // If country is specified, check for country-specific admin
+        if let Some(country_id) = country {
+            let country_admins: Map<u32, Address> = env
+                .storage()
+                .instance()
+                .get(&symbol_short!("CntAdm"))
+                .unwrap_or(Map::new(env));
+            
+            if let Some(country_admin) = country_admins.get(country_id) {
+                return Some(country_admin);
+            }
+        }
+        
+        // Fall back to main admin
+        env.storage().instance().get(&symbol_short!("Admin"))
+    }
+
+    /// Require admin auth for a specific country (checks country admin first, then main admin)
+    fn require_admin_auth(env: &Env, country: Option<u32>) {
+        let admin = Self::get_admin_for_country(env, country)
+            .unwrap_or_else(|| panic!("Admin not set"));
+        admin.require_auth();
+    }
+
     /// Set Game Hub address (admin-only)
     pub fn set_game_hub(env: Env, game_hub: Address) {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&symbol_short!("Admin"))
-            .unwrap();
-        admin.require_auth();
+        Self::require_admin_auth(&env, None);
         env.storage().instance().set(&symbol_short!("GameHub"), &game_hub);
     }
 
     /// Set ZK verifier address (admin-only)
     pub fn set_verifier(env: Env, verifier: Address) {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&symbol_short!("Admin"))
-            .unwrap();
-        admin.require_auth();
+        Self::require_admin_auth(&env, None);
         env.storage().instance().set(&symbol_short!("Verifier"), &verifier);
     }
 
-    /// Set a new admin (admin-only)
+    /// Set a new main admin (main admin-only)
     pub fn set_admin(env: Env, new_admin: Address) {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&symbol_short!("Admin"))
-            .unwrap();
-        admin.require_auth();
+        Self::require_admin_auth(&env, None);
         env.storage().instance().set(&symbol_short!("Admin"), &new_admin);
     }
 
-    /// Upgrade contract (admin-only)
-    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
-        let admin: Address = env
+    /// Set country-specific admin (main admin-only)
+    /// Allows main admin to delegate admin rights for specific countries
+    pub fn set_country_admin(env: Env, country: u32, country_admin: Address) {
+        Self::require_admin_auth(&env, None);
+        
+        let mut country_admins: Map<u32, Address> = env
             .storage()
             .instance()
-            .get(&symbol_short!("Admin"))
-            .unwrap();
-        admin.require_auth();
+            .get(&symbol_short!("CntAdm"))
+            .unwrap_or(Map::new(&env));
+        
+        country_admins.set(country, country_admin.clone());
+        env.storage().instance().set(&symbol_short!("CntAdm"), &country_admins);
+    }
+
+    /// Remove country-specific admin (main admin-only)
+    /// Removes country admin, reverting to main admin for that country
+    pub fn remove_country_admin(env: Env, country: u32) {
+        Self::require_admin_auth(&env, None);
+        
+        let mut country_admins: Map<u32, Address> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("CntAdm"))
+            .unwrap_or(Map::new(&env));
+        
+        country_admins.remove(country);
+        env.storage().instance().set(&symbol_short!("CntAdm"), &country_admins);
+    }
+
+    /// Get country-specific admin (returns country admin if set, otherwise main admin)
+    pub fn get_country_admin(env: Env, country: u32) -> Option<Address> {
+        Self::get_admin_for_country(&env, Some(country))
+    }
+
+    /// Upgrade contract (main admin-only)
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
+        Self::require_admin_auth(&env, None);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
     }
 
-    /// Set country allowed status (admin-only)
+    /// Set country allowed status (country admin or main admin)
+    /// Country admins can only set policy for their assigned country
     pub fn set_country_allowed(env: Env, country: u32, allowed: bool) {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&symbol_short!("Admin"))
-            .unwrap();
-        admin.require_auth();
+        // Check if caller is country admin or main admin
+        Self::require_admin_auth(&env, Some(country));
 
         let mut allow_map: Map<u32, bool> = env
             .storage()
@@ -149,14 +187,9 @@ impl GeoTrustMatch {
             .set(&symbol_short!("AllowCnt"), &allow_map);
     }
 
-    /// Set default allow all policy (admin-only)
+    /// Set default allow all policy (main admin-only)
     pub fn set_default_allow_all(env: Env, value: bool) {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&symbol_short!("Admin"))
-            .unwrap();
-        admin.require_auth();
+        Self::require_admin_auth(&env, None);
         env.storage()
             .instance()
             .set(&symbol_short!("DefAllow"), &value);
@@ -212,15 +245,20 @@ impl GeoTrustMatch {
             .unwrap_or(Map::new(&env));
 
         let mut result = vec![&env];
-        let start = page * page_size;
-        let end = start + page_size;
+        
+        // Use checked arithmetic to prevent overflow
+        let start = page.checked_mul(page_size)
+            .unwrap_or_else(|| panic!("Page calculation overflow"));
+        let end = start.checked_add(page_size)
+            .unwrap_or_else(|| panic!("End calculation overflow"));
 
         let mut count = 0u32;
         allow_map.iter().for_each(|(country, _)| {
             if count >= start && count < end {
                 result.push_back(country);
             }
-            count += 1;
+            count = count.checked_add(1)
+                .unwrap_or_else(|| panic!("Count overflow"));
         });
 
         result
@@ -228,8 +266,10 @@ impl GeoTrustMatch {
 
     /// Create a new session
     pub fn create_session(env: Env) -> u32 {
-        let session_id = env.storage().instance().get(&symbol_short!("NextSess"))
-            .unwrap_or(0u32) + 1;
+        let current_id = env.storage().instance().get(&symbol_short!("NextSess"))
+            .unwrap_or(0u32);
+        let session_id = current_id.checked_add(1)
+            .unwrap_or_else(|| panic!("Session ID overflow"));
         env.storage().instance().set(&symbol_short!("NextSess"), &session_id);
 
         let session = Session {
@@ -249,7 +289,8 @@ impl GeoTrustMatch {
 
         let key = (symbol_short!("Session"), session_id);
         env.storage().temporary().set(&key, &session);
-        env.storage().temporary().extend_ttl(&key, 100000, 100000);
+        // Use different extend_to and threshold to ensure expiration works
+        env.storage().temporary().extend_ttl(&key, 100000, 99999);
 
         session_id
     }
@@ -277,7 +318,8 @@ impl GeoTrustMatch {
             if proof.public_inputs.len() < 1 {
                 panic!("Location proof missing public inputs");
             }
-            let first_input = proof.public_inputs.get(0).unwrap();
+            let first_input = proof.public_inputs.get(0)
+                .unwrap_or_else(|| panic!("Location proof missing first input"));
             if first_input != cell_id {
                 panic!("Location proof public inputs mismatch");
             }
@@ -327,7 +369,8 @@ impl GeoTrustMatch {
             // Call Game Hub start_game if configured
             // Game Hub interface: start_game(game_id: address, session_id: u32, player1: address, player2: address, player1_points: i128, player2_points: i128)
             if let Some(game_hub_addr) = env.storage().instance().get::<_, Address>(&symbol_short!("GameHub")) {
-                let player1_addr = session.player1.clone().unwrap();
+                let player1_addr = session.player1.clone()
+                    .unwrap_or_else(|| panic!("Player 1 not set"));
                 // Get the contract's own address as game_id
                 let game_id = env.current_contract_address();
                 
@@ -353,7 +396,8 @@ impl GeoTrustMatch {
         }
 
         env.storage().temporary().set(&key, &session);
-        env.storage().temporary().extend_ttl(&key, 100000, 100000);
+        // Use different extend_to and threshold to ensure expiration works
+        env.storage().temporary().extend_ttl(&key, 100000, 99999);
     }
 
     /// Resolve a match
@@ -369,13 +413,23 @@ impl GeoTrustMatch {
             panic!("Session not active");
         }
 
-        let player1 = session.player1.clone().unwrap();
-        let player2 = session.player2.clone().unwrap();
+        let player1 = session.player1.clone()
+            .unwrap_or_else(|| panic!("Player 1 not set"));
+        let player2 = session.player2.clone()
+            .unwrap_or_else(|| panic!("Player 2 not set"));
 
         // Check for match: same asset_tag and same or adjacent cell_id
         let matched = session.p1_asset_tag == session.p2_asset_tag
             && (session.p1_cell_id == session.p2_cell_id
-                || (session.p1_cell_id.unwrap() as i32 - session.p2_cell_id.unwrap() as i32).abs() <= 1);
+                || {
+                    let p1_cell = session.p1_cell_id
+                        .unwrap_or_else(|| panic!("Player 1 cell ID missing"));
+                    let p2_cell = session.p2_cell_id
+                        .unwrap_or_else(|| panic!("Player 2 cell ID missing"));
+                    let diff = (p1_cell as i32).checked_sub(p2_cell as i32)
+                        .unwrap_or_else(|| panic!("Cell ID calculation overflow"));
+                    diff.abs() <= 1
+                });
 
         let winner = if matched {
             Some(player1.clone()) // First player wins if matched
@@ -403,7 +457,8 @@ impl GeoTrustMatch {
         }
 
         env.storage().temporary().set(&key, &session);
-        env.storage().temporary().extend_ttl(&key, 100000, 100000);
+        // Use different extend_to and threshold to ensure expiration works
+        env.storage().temporary().extend_ttl(&key, 100000, 99999);
 
         MatchResult { matched, winner }
     }
@@ -416,25 +471,25 @@ impl GeoTrustMatch {
 
     /// Internal function to check if country is allowed
     fn is_country_allowed_internal(env: &Env, country: u32) -> bool {
-        // Check deny list first
+        // Check deny list first (use try_get to avoid panics)
         let deny_map: Map<u32, bool> = env
             .storage()
             .persistent()
             .get(&symbol_short!("DenyCnt"))
             .unwrap_or(Map::new(env));
 
-        if deny_map.get(country).is_some() {
+        if deny_map.try_get(country).unwrap_or_default().is_some() {
             return false;
         }
 
-        // Check allow list
+        // Check allow list (use try_get to avoid panics)
         let allow_map: Map<u32, bool> = env
             .storage()
             .persistent()
             .get(&symbol_short!("AllowCnt"))
             .unwrap_or(Map::new(env));
 
-        if allow_map.get(country).is_some() {
+        if allow_map.try_get(country).unwrap_or_default().is_some() {
             return true;
         }
 

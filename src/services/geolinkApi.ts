@@ -207,12 +207,23 @@ class GeoLinkApiClient {
           errorMessage = errorDetails?.error || errorDetails?.message || 'Bad Request - Missing required parameters';
         }
         
-        throw new Error(errorMessage);
+        // Create error with status code for caller to handle
+        const apiError = new Error(errorMessage);
+        (apiError as any).status = response.status;
+        throw apiError;
       }
 
       return await response.json();
-    } catch (error) {
-      console.error(`[GeoLinkAPI] Request failed for ${endpoint}:`, error);
+    } catch (error: any) {
+      // Only log errors that aren't 400/404 (which are expected for some endpoints)
+      // Check both error.status and error.message to catch all cases
+      const isExpectedError = error.status === 400 || error.status === 404 ||
+        error.message?.includes('400') || error.message?.includes('404') ||
+        error.message?.includes('not found') || error.message?.includes('Missing required parameters');
+      
+      if (!isExpectedError) {
+        console.error(`[GeoLinkAPI] Request failed for ${endpoint}:`, error);
+      }
       throw error;
     }
   }
@@ -262,6 +273,8 @@ class GeoLinkApiClient {
       // If endpoint doesn't exist (404) or has missing parameters (400), return empty array
       // This is non-critical - the app will use session-based users instead
       if (
+        error.status === 400 ||
+        error.status === 404 ||
         error.message?.includes('404') || 
         error.message?.includes('not found') ||
         error.message?.includes('400') ||
@@ -270,7 +283,7 @@ class GeoLinkApiClient {
       ) {
         // Silently return empty array - this endpoint may not be available or may require different parameters
         // The app will use session-based users instead
-        console.log('[GeoLinkAPI] Nearby users endpoint not available or requires different parameters, using session-based users');
+        // Don't log - this is expected behavior
         return [];
       }
       throw error;

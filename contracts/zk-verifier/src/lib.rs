@@ -43,7 +43,10 @@ impl ZkVerifier {
             return false;
         }
 
-        let cell_id = proof.public_inputs.get(0).unwrap();
+        let cell_id = match proof.public_inputs.get(0) {
+            Some(id) => id,
+            None => return false,
+        };
         if cell_id != expected_cell_id {
             return false;
         }
@@ -82,8 +85,16 @@ impl ZkVerifier {
             // For full Groth16, B is 128 bytes, but our proof is 64 bytes total
             // So we use the remaining bytes for B (simplified)
             if proof_bytes.len() >= 64 {
-                for i in 0..32.min(proof_bytes.len() - 32) {
-                    b_bytes[i] = proof_bytes[32 + i];
+                let max_i = 32.min(proof_bytes.len().saturating_sub(32));
+                for i in 0..max_i {
+                    let idx = match 32usize.checked_add(i) {
+                        Some(idx) => idx,
+                        None => return false,
+                    };
+                    if idx >= proof_bytes.len() {
+                        return false;
+                    }
+                    b_bytes[i] = proof_bytes[idx];
                 }
             }
             
@@ -100,7 +111,14 @@ impl ZkVerifier {
                 // Use C point if available
                 let mut c = [0u8; 64];
                 for i in 0..64 {
-                    c[i] = proof_bytes[64 + i];
+                    let idx = match 64usize.checked_add(i) {
+                        Some(idx) => idx,
+                        None => return false,
+                    };
+                    if idx >= proof_bytes.len() {
+                        return false;
+                    }
+                    c[i] = proof_bytes[idx];
                 }
                 Bn254G1Affine::from_array(&env, &c)
             } else {
@@ -117,25 +135,36 @@ impl ZkVerifier {
             // Step 6: Compute IC_sum = sum(public_inputs[i] * IC[i])
             // Start with IC[0] (first IC point)
             let mut ic_sum = if vk.ic.len() > 0 {
-                let ic0 = vk.ic.get(0).unwrap();
+                let ic0 = match vk.ic.get(0) {
+                    Some(ic) => ic,
+                    None => return false,
+                };
                 Bn254G1Affine::from_array(&env, &ic0.to_array())
             } else {
                 return false;
             };
             
             // Add remaining IC points scaled by public inputs
-            for i in 1..proof.public_inputs.len() {
+            // Limit iterations to prevent unbounded loops
+            let max_iterations = proof.public_inputs.len().min(vk.ic.len()).min(1000);
+            for i in 1..max_iterations {
                 if i >= vk.ic.len() {
                     return false;
                 }
-                let input = proof.public_inputs.get(i).unwrap();
-                let ic_point = vk.ic.get(i).unwrap();
+                let input = match proof.public_inputs.get(i) {
+                    Some(inp) => inp,
+                    None => return false,
+                };
+                let ic_point = match vk.ic.get(i) {
+                    Some(ic) => ic,
+                    None => return false,
+                };
                 let ic_g1 = Bn254G1Affine::from_array(&env, &ic_point.to_array());
                 
                 // Convert input to Fr scalar
                 // U256 can be created from bytes
                 let mut input_bytes_array = [0u8; 32];
-                // Convert u32 to big-endian bytes
+                // Convert u32 to big-endian bytes (safe, no overflow for u32)
                 input_bytes_array[28] = ((input >> 24) & 0xFF) as u8;
                 input_bytes_array[29] = ((input >> 16) & 0xFF) as u8;
                 input_bytes_array[30] = ((input >> 8) & 0xFF) as u8;
@@ -186,7 +215,10 @@ impl ZkVerifier {
             }
             
             // Step 8: Verify circuit constraints
-            let grid_size = proof.public_inputs.get(1).unwrap();
+            let grid_size = match proof.public_inputs.get(1) {
+                Some(size) => size,
+                None => return false,
+            };
             if grid_size == 0 {
                 return false;
             }
@@ -208,7 +240,7 @@ impl ZkVerifier {
                 .get(&symbol_short!("Nonces"))
                 .unwrap_or(Map::new(&env));
             
-            if nonces.get(proof_id.clone()).is_some() {
+            if nonces.try_get(proof_id.clone()).is_ok() {
                 return false;
             }
             
@@ -273,8 +305,11 @@ impl ZkVerifier {
             panic!("Invalid VK: IC vector is empty");
         }
         
-        for i in 0..vk.ic.len() {
-            let ic_point = vk.ic.get(i).unwrap();
+        // Limit iterations to prevent unbounded loops
+        let max_iterations = vk.ic.len().min(1000);
+        for i in 0..max_iterations {
+            let ic_point = vk.ic.get(i)
+                .unwrap_or_else(|| panic!("Invalid VK: IC point missing"));
             let ic_bytes = ic_point.to_array();
             if ic_bytes.iter().all(|&b| b == 0) {
                 panic!("Invalid VK: IC point is zero");
@@ -366,10 +401,18 @@ impl ZkVerifier {
             panic!("Proofs and cell_ids length mismatch");
         }
 
+        // Limit batch size to prevent unbounded operations
+        let max_batch_size = proofs.len().min(expected_cell_ids.len()).min(100);
+        if proofs.len() > max_batch_size || expected_cell_ids.len() > max_batch_size {
+            panic!("Batch size too large");
+        }
+
         let mut results = Vec::new(&env);
         for i in 0..proofs.len() {
-            let proof = proofs.get(i).unwrap();
-            let cell_id = expected_cell_ids.get(i).unwrap();
+            let proof = proofs.get(i)
+                .unwrap_or_else(|| panic!("Proof missing at index"));
+            let cell_id = expected_cell_ids.get(i)
+                .unwrap_or_else(|| panic!("Cell ID missing at index"));
             let result = Self::verify(env.clone(), proof, cell_id);
             results.push_back(result);
         }
@@ -382,9 +425,20 @@ impl ZkVerifier {
             .storage()
             .instance()
             .get(&symbol_short!("Admin"))
-            .unwrap();
+            .unwrap_or_else(|| panic!("Admin not set"));
         admin.require_auth();
         env.storage().instance().set(&symbol_short!("Admin"), &new_admin);
+    }
+
+    /// Upgrade contract (admin-only)
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("Admin"))
+            .unwrap_or_else(|| panic!("Admin not set"));
+        admin.require_auth();
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
     }
 }
 

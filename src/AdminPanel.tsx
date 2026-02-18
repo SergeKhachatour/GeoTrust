@@ -12,6 +12,8 @@ interface AdminPanelProps {
   minimized?: boolean;
   onToggleMinimize?: () => void;
   onAdminChanged?: () => void;
+  walletAddress?: string | null; // Current wallet address to check if user is main admin
+  mainAdminAddress?: string | null; // Main admin address from contract
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -23,6 +25,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   minimized = false,
   onToggleMinimize,
   onAdminChanged,
+  walletAddress,
+  mainAdminAddress,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -30,6 +34,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showChangeAdminOverlay, setShowChangeAdminOverlay] = useState(false);
   const [newAdminAddress, setNewAdminAddress] = useState('');
   const [isChangingAdmin, setIsChangingAdmin] = useState(false);
+  const [countryAdmins, setCountryAdmins] = useState<Map<number, string>>(new Map());
+  const [selectedCountryForAdmin, setSelectedCountryForAdmin] = useState<number | null>(null);
+  const [showCountryAdminOverlay, setShowCountryAdminOverlay] = useState(false);
+  const [newCountryAdminAddress, setNewCountryAdminAddress] = useState('');
+  const [isSettingCountryAdmin, setIsSettingCountryAdmin] = useState(false);
+  
+  // Check if current user is main admin
+  const isMainAdmin = walletAddress && mainAdminAddress && walletAddress === mainAdminAddress;
+
+  // Load country admin for a specific country (on-demand)
+  const loadCountryAdmin = async (countryCode: number) => {
+    if (!contractClient || !isMainAdmin) return;
+    
+    try {
+      const admin = await contractClient.getCountryAdmin(countryCode);
+      if (admin) {
+        const newAdmins = new Map(countryAdmins);
+        newAdmins.set(countryCode, admin);
+        setCountryAdmins(newAdmins);
+      } else {
+        // Remove from map if no admin
+        const newAdmins = new Map(countryAdmins);
+        newAdmins.delete(countryCode);
+        setCountryAdmins(newAdmins);
+      }
+    } catch (error) {
+      console.debug(`[AdminPanel] No admin for country ${countryCode}`);
+    }
+  };
 
   // Load countries from GeoJSON file
   useEffect(() => {
@@ -155,6 +188,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const handleSetCountryAdmin = async (countryCode: number) => {
+    setSelectedCountryForAdmin(countryCode);
+    // Load current admin for this country if not already loaded
+    if (!countryAdmins.has(countryCode)) {
+      await loadCountryAdmin(countryCode);
+    }
+    setShowCountryAdminOverlay(true);
+    // Pre-fill with existing admin if any
+    const existingAdmin = countryAdmins.get(countryCode);
+    setNewCountryAdminAddress(existingAdmin || '');
+  };
+
+  const handleSaveCountryAdmin = async () => {
+    if (!selectedCountryForAdmin) return;
+    
+    if (!newCountryAdminAddress || newCountryAdminAddress.length !== 56 || !newCountryAdminAddress.startsWith('G')) {
+      alert('Please enter a valid Stellar address (56 characters, starting with G)');
+      return;
+    }
+
+    setIsSettingCountryAdmin(true);
+    try {
+      if (newCountryAdminAddress.trim() === '') {
+        // Remove country admin
+        await contractClient.removeCountryAdmin(selectedCountryForAdmin);
+        const newAdmins = new Map(countryAdmins);
+        newAdmins.delete(selectedCountryForAdmin);
+        setCountryAdmins(newAdmins);
+        alert('Country admin removed successfully');
+        // Refresh to confirm removal
+        await loadCountryAdmin(selectedCountryForAdmin);
+      } else {
+        // Set country admin
+        await contractClient.setCountryAdmin(selectedCountryForAdmin, newCountryAdminAddress);
+        const newAdmins = new Map(countryAdmins);
+        newAdmins.set(selectedCountryForAdmin, newCountryAdminAddress);
+        setCountryAdmins(newAdmins);
+        alert('Country admin set successfully');
+        // Refresh country admin to ensure it's up to date
+        await loadCountryAdmin(selectedCountryForAdmin);
+      }
+      setShowCountryAdminOverlay(false);
+      setNewCountryAdminAddress('');
+      setSelectedCountryForAdmin(null);
+    } catch (error: any) {
+      console.error('Failed to set country admin:', error);
+      alert(`Failed to set country admin: ${error.message || error}`);
+    } finally {
+      setIsSettingCountryAdmin(false);
+    }
+  };
+
+  const getCountryAdmin = (countryCode: number): string | null => {
+    return countryAdmins.get(countryCode) || null;
+  };
+
   useEffect(() => {
     if (!map) return;
 
@@ -237,16 +326,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       <div className="country-list">
         {filteredCountries.map((country) => {
           const isAllowed = isCountryAllowed(country.code);
+          const countryAdmin = getCountryAdmin(country.code);
+          const hasCountryAdmin = countryAdmin !== null;
           return (
-            <div key={country.code} className="country-item">
-              <span>{country.name}</span>
-              <button
-                className={`country-toggle ${isAllowed ? 'allowed' : 'denied'}`}
-                onClick={() => handleToggleCountry(country.code)}
-                disabled={isLoading}
-              >
-                {isAllowed ? 'Allowed' : 'Denied'}
-              </button>
+            <div key={country.code} className="country-item" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                <span style={{ flex: 1 }}>{country.name}</span>
+                <button
+                  className={`country-toggle ${isAllowed ? 'allowed' : 'denied'}`}
+                  onClick={() => handleToggleCountry(country.code)}
+                  disabled={isLoading}
+                  style={{ marginLeft: '8px' }}
+                >
+                  {isAllowed ? 'Allowed' : 'Denied'}
+                </button>
+              </div>
+              {isMainAdmin && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#666', marginTop: '2px', padding: '2px 0' }}>
+                  <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {hasCountryAdmin && (
+                      <span style={{ 
+                        display: 'inline-block',
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: '#4caf50',
+                        flexShrink: 0
+                      }} title="Has country admin" />
+                    )}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {hasCountryAdmin ? (
+                        <>Admin: {countryAdmin.substring(0, 8)}...{countryAdmin.substring(48)}</>
+                      ) : (
+                        <>No country admin (uses main admin)</>
+                      )}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleSetCountryAdmin(country.code)}
+                    disabled={isLoading}
+                    style={{
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      marginLeft: '4px',
+                      backgroundColor: hasCountryAdmin ? '#ff9800' : '#4caf50',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                    title={hasCountryAdmin ? 'Change/Remove Country Admin' : 'Set Country Admin'}
+                  >
+                    {hasCountryAdmin ? 'Edit' : 'Set Admin'}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -274,6 +409,88 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </p>
       </div>
         </>
+      )}
+
+      {/* Country Admin Overlay */}
+      {showCountryAdminOverlay && selectedCountryForAdmin !== null && (
+        <div 
+          className="marker-popup-overlay" 
+          onClick={() => !isSettingCountryAdmin && setShowCountryAdminOverlay(false)}
+          style={{ zIndex: 3000 }}
+        >
+          <div className="marker-popup" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <button 
+              className="marker-popup-close" 
+              onClick={() => !isSettingCountryAdmin && setShowCountryAdminOverlay(false)}
+              disabled={isSettingCountryAdmin}
+            >
+              ×
+            </button>
+            <h3>Set Country Admin</h3>
+            <div className="marker-popup-content">
+              <div className="marker-popup-field">
+                <label>Country:</label>
+                <span style={{ fontWeight: 'bold' }}>
+                  {countryList.find(c => c.code === selectedCountryForAdmin)?.name || `Country ${selectedCountryForAdmin}`}
+                </span>
+              </div>
+              <div className="marker-popup-field">
+                <label>Country Admin Address:</label>
+                <input
+                  type="text"
+                  value={newCountryAdminAddress}
+                  onChange={(e) => setNewCountryAdminAddress(e.target.value)}
+                  placeholder="GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX (leave empty to remove)"
+                  disabled={isSettingCountryAdmin}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    fontSize: '12px',
+                    fontFamily: 'Courier New, monospace',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    marginTop: '4px'
+                  }}
+                />
+                <small style={{ color: '#666', fontSize: '10px', marginTop: '4px', display: 'block' }}>
+                  Enter the Stellar address (56 characters, starting with G) of the country admin.
+                  <br />
+                  Leave empty to remove the country admin (reverts to main admin).
+                </small>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                <button
+                  className="primary-button"
+                  onClick={handleSaveCountryAdmin}
+                  disabled={isSettingCountryAdmin || (newCountryAdminAddress.trim() !== '' && (newCountryAdminAddress.length !== 56 || !newCountryAdminAddress.startsWith('G')))}
+                  style={{ 
+                    flex: 1,
+                    backgroundColor: newCountryAdminAddress.trim() ? '#4caf50' : '#ff9800',
+                    color: '#fff'
+                  }}
+                >
+                  {isSettingCountryAdmin ? 'Saving...' : (newCountryAdminAddress.trim() ? 'Set Admin' : 'Remove Admin')}
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => {
+                    setShowCountryAdminOverlay(false);
+                    setNewCountryAdminAddress('');
+                    setSelectedCountryForAdmin(null);
+                  }}
+                  disabled={isSettingCountryAdmin}
+                  style={{ 
+                    flex: 1,
+                    backgroundColor: '#666',
+                    color: '#fff'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Change Admin Overlay */}
