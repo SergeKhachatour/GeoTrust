@@ -77,6 +77,7 @@ impl GeoTrustMatch {
         env.storage()
             .instance()
             .set(&symbol_short!("DefAllow"), &default_allow_all);
+        Self::extend_instance_ttl(&env);
     }
 
     /// Get admin for a specific country (returns country admin if set, otherwise main admin)
@@ -105,22 +106,31 @@ impl GeoTrustMatch {
         admin.require_auth();
     }
 
+    /// Extend instance storage TTL to keep contract data alive
+    /// Threshold: ~1 day (17,280 ledgers), Extend to: ~30 days (518,400 ledgers)
+    fn extend_instance_ttl(env: &Env) {
+        env.storage().instance().extend_ttl(17_280, 518_400);
+    }
+
     /// Set Game Hub address (admin-only)
     pub fn set_game_hub(env: Env, game_hub: Address) {
         Self::require_admin_auth(&env, None);
         env.storage().instance().set(&symbol_short!("GameHub"), &game_hub);
+        Self::extend_instance_ttl(&env);
     }
 
     /// Set ZK verifier address (admin-only)
     pub fn set_verifier(env: Env, verifier: Address) {
         Self::require_admin_auth(&env, None);
         env.storage().instance().set(&symbol_short!("Verifier"), &verifier);
+        Self::extend_instance_ttl(&env);
     }
 
     /// Set a new main admin (main admin-only)
     pub fn set_admin(env: Env, new_admin: Address) {
         Self::require_admin_auth(&env, None);
         env.storage().instance().set(&symbol_short!("Admin"), &new_admin);
+        Self::extend_instance_ttl(&env);
     }
 
     /// Set country-specific admin (main admin-only)
@@ -136,6 +146,7 @@ impl GeoTrustMatch {
         
         country_admins.set(country, country_admin.clone());
         env.storage().instance().set(&symbol_short!("CntAdm"), &country_admins);
+        Self::extend_instance_ttl(&env);
     }
 
     /// Remove country-specific admin (main admin-only)
@@ -151,6 +162,7 @@ impl GeoTrustMatch {
         
         country_admins.remove(country);
         env.storage().instance().set(&symbol_short!("CntAdm"), &country_admins);
+        Self::extend_instance_ttl(&env);
     }
 
     /// Get country-specific admin (returns country admin if set, otherwise main admin)
@@ -193,6 +205,7 @@ impl GeoTrustMatch {
         env.storage()
             .instance()
             .set(&symbol_short!("DefAllow"), &value);
+        Self::extend_instance_ttl(&env);
     }
 
     /// Get admin address
@@ -271,6 +284,7 @@ impl GeoTrustMatch {
         let session_id = current_id.checked_add(1)
             .unwrap_or_else(|| panic!("Session ID overflow"));
         env.storage().instance().set(&symbol_short!("NextSess"), &session_id);
+        Self::extend_instance_ttl(&env);
 
         let session = Session {
             player1: None,
@@ -289,8 +303,9 @@ impl GeoTrustMatch {
 
         let key = (symbol_short!("Session"), session_id);
         env.storage().temporary().set(&key, &session);
-        // Use different extend_to and threshold to ensure expiration works
-        env.storage().temporary().extend_ttl(&key, 100000, 99999);
+        // Extend TTL: signature is extend_ttl(key, threshold, extend_to)
+        // threshold must be <= extend_to, so we use threshold=100000, extend_to=100001
+        env.storage().temporary().extend_ttl(&key, 100000, 100001);
 
         session_id
     }
@@ -396,8 +411,9 @@ impl GeoTrustMatch {
         }
 
         env.storage().temporary().set(&key, &session);
-        // Use different extend_to and threshold to ensure expiration works
-        env.storage().temporary().extend_ttl(&key, 100000, 99999);
+        // Extend TTL: signature is extend_ttl(key, threshold, extend_to)
+        // threshold must be <= extend_to, so we use threshold=100000, extend_to=100001
+        env.storage().temporary().extend_ttl(&key, 100000, 100001);
     }
 
     /// Resolve a match
@@ -457,8 +473,9 @@ impl GeoTrustMatch {
         }
 
         env.storage().temporary().set(&key, &session);
-        // Use different extend_to and threshold to ensure expiration works
-        env.storage().temporary().extend_ttl(&key, 100000, 99999);
+        // Extend TTL: signature is extend_ttl(key, threshold, extend_to)
+        // threshold must be <= extend_to, so we use threshold=100000, extend_to=100001
+        env.storage().temporary().extend_ttl(&key, 100000, 100001);
 
         MatchResult { matched, winner }
     }
