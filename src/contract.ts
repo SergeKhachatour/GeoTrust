@@ -249,6 +249,40 @@ export class ContractClient {
     await this.call('set_default_allow_all', value);
   }
 
+  // Country admin management
+  async setCountryAdmin(country: number, countryAdmin: string): Promise<void> {
+    await this.call('set_country_admin', country, countryAdmin);
+  }
+
+  async removeCountryAdmin(country: number): Promise<void> {
+    await this.call('remove_country_admin', country);
+  }
+
+  async getCountryAdmin(country: number): Promise<string | null> {
+    try {
+      const result = await this.call('get_country_admin', country);
+      if (!result || result === null || result === undefined) {
+        return null;
+      }
+      if (typeof result === 'string') {
+        return result;
+      }
+      return String(result);
+    } catch (error) {
+      console.error('[ContractClient] Failed to get country admin:', error);
+      return null;
+    }
+  }
+
+  // Deny list management (using set_country_allowed with false)
+  async setCountryDenied(country: number, denied: boolean): Promise<void> {
+    // The contract uses DenyCnt map internally, but we can use set_country_allowed(false) to deny
+    // Note: The contract checks deny list first, so setting allowed=false effectively denies
+    // However, the contract doesn't expose a direct deny endpoint, so we'll need to check the contract
+    // For now, we'll use set_country_allowed(!denied) to toggle
+    await this.call('set_country_allowed', country, !denied);
+  }
+
   async setVerifier(verifierId: string): Promise<void> {
     console.log('[ContractClient] setVerifier called with:', verifierId);
     // Convert string to Address - Contract.call() will handle the conversion

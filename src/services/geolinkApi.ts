@@ -265,10 +265,12 @@ class GeoLinkApiClient {
         error.message?.includes('404') || 
         error.message?.includes('not found') ||
         error.message?.includes('400') ||
-        error.message?.includes('Missing required parameters')
+        error.message?.includes('Missing required parameters') ||
+        error.message?.includes('Bad Request')
       ) {
         // Silently return empty array - this endpoint may not be available or may require different parameters
         // The app will use session-based users instead
+        console.log('[GeoLinkAPI] Nearby users endpoint not available or requires different parameters, using session-based users');
         return [];
       }
       throw error;
@@ -302,14 +304,27 @@ class GeoLinkApiClient {
   ): Promise<NearbyContract[]> {
     console.log('[GeoLinkAPI] Fetching nearby contracts:', { latitude, longitude, radius });
     try {
-      const response = await this.request<{ contracts?: NearbyContract[] }>(
+      const response = await this.request<{ contracts?: NearbyContract[]; nearbyContracts?: NearbyContract[] }>(
         `/api/contracts/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`,
         {},
         false // Use data consumer key
       );
-      return response.contracts || [];
-    } catch (error) {
-      console.warn('[GeoLinkAPI] Nearby contracts endpoint not available:', error);
+      const contracts = response.contracts || response.nearbyContracts || [];
+      console.log('[GeoLinkAPI] Fetched', contracts.length, 'nearby contracts');
+      return contracts;
+    } catch (error: any) {
+      // If endpoint doesn't exist (404) or has missing parameters (400), return empty array
+      if (
+        error.message?.includes('404') || 
+        error.message?.includes('not found') ||
+        error.message?.includes('400') ||
+        error.message?.includes('Missing required parameters') ||
+        error.message?.includes('Bad Request')
+      ) {
+        console.log('[GeoLinkAPI] Nearby contracts endpoint not available or requires different parameters');
+        return [];
+      }
+      console.warn('[GeoLinkAPI] Nearby contracts endpoint error:', error);
       return [];
     }
   }

@@ -225,11 +225,12 @@ const App: React.FC = () => {
   const [overlayMinimized, setOverlayMinimized] = useState(false);
   const [allowedCountries, setAllowedCountries] = useState<Set<number>>(new Set()); // u32 country codes
   const [defaultAllowAll, setDefaultAllowAll] = useState(false);
+  const [countryDataLoaded, setCountryDataLoaded] = useState(false); // Track when country policy data has been loaded
   const [playerLocation, setPlayerLocation] = useState<[number, number] | null>(null);
   const [sessionLink, setSessionLink] = useState<string>('');
   const [walletError, setWalletError] = useState<string | null>(null);
   const [showOtherUsers, setShowOtherUsers] = useState(true);
-  const [maxDistance, setMaxDistance] = useState(10000); // km
+  const [maxDistance, setMaxDistance] = useState(50000); // km - default to maximum
   const [otherUsers, setOtherUsers] = useState<Array<{ id: string; location: [number, number]; distance: number }>>([]);
   // Note: nearbyNFTs and nearbyContracts are fetched but not yet displayed in UI
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -266,6 +267,59 @@ const App: React.FC = () => {
   const contractMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const contractCirclesRef = useRef<string[]>([]);
   const userCirclesRef = useRef<string[]>([]);
+  
+  // Debounce refs for marker updates
+  const markerUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMarkerUpdateRef = useRef<number>(0);
+  
+  // Track previous marker data to prevent unnecessary updates
+  const previousUserMarkersRef = useRef<string>('');
+  const previousContractMarkersRef = useRef<string>('');
+  
+  // Map settings state
+  const [mapStyle, setMapStyle] = useState<string>('mapbox://styles/mapbox/light-v11');
+  const [showMapSettings, setShowMapSettings] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [mapFilters, setMapFilters] = useState({
+    showUsers: true,
+    showNFTs: true,
+    showContracts: true,
+  });
+  
+  // 3D controls state
+  const [enable3D, setEnable3D] = useState(false);
+  const [pitch, setPitch] = useState(0);
+  const [bearing, setBearing] = useState(0);
+  const [showBuildings, setShowBuildings] = useState(false);
+  const [showTerrain, setShowTerrain] = useState(false);
+  
+  // Apply filters to marker visibility
+  useEffect(() => {
+    if (!map.current) return;
+    
+    // Update user markers visibility
+    document.querySelectorAll('.other-user-marker, .session-user-marker').forEach((marker) => {
+      (marker as HTMLElement).style.display = mapFilters.showUsers ? 'flex' : 'none';
+    });
+    
+    // Update NFT markers visibility
+    nftMarkersRef.current.forEach((marker) => {
+      const el = marker.getElement();
+      if (el) {
+        el.style.display = mapFilters.showNFTs ? 'flex' : 'none';
+      }
+    });
+    
+    // Update contract markers visibility
+    contractMarkersRef.current.forEach((marker) => {
+      const el = marker.getElement();
+      if (el) {
+        el.style.display = mapFilters.showContracts ? 'flex' : 'none';
+      }
+    });
+  }, [mapFilters, nftMarkersRef, contractMarkersRef]);
 
   // Define updateCountryOverlay first (used by loadCountryOverlay)
   const updateCountryOverlay = useCallback(() => {
@@ -345,10 +399,12 @@ const App: React.FC = () => {
       
       // Always set allowed as a boolean
       const wasAllowed = feature.properties.allowed;
+      // Handle undefined (initial state) - treat as not allowed for comparison
+      const wasAllowedBool = wasAllowed === undefined ? false : Boolean(wasAllowed);
       feature.properties.allowed = Boolean(allowed);
       
-      // Count updates for debugging
-      if (wasAllowed !== feature.properties.allowed) {
+      // Count updates for debugging (treat undefined as false for comparison)
+      if (wasAllowedBool !== feature.properties.allowed) {
         updatedCount++;
       }
       
@@ -371,16 +427,25 @@ const App: React.FC = () => {
   }, [defaultAllowAll, allowedCountries]);
 
   // Call updateCountryOverlay when defaultAllowAll or allowedCountries changes
+  // Only update if country data has been loaded to prevent race conditions
   useEffect(() => {
+    // Don't update if data hasn't been loaded yet
+    if (!countryDataLoaded) {
+      console.log('[App] Country data not loaded yet, skipping overlay update');
+      return;
+    }
+    
     // Use a delay to ensure state has fully updated and propagated
     const timer = setTimeout(() => {
-      if (map.current && map.current.loaded()) {
+      if (map.current && map.current.loaded() && map.current.isStyleLoaded()) {
         const source = map.current.getSource('countries');
         if (source) {
           // Get the latest state values directly (not from closure) to ensure we have the updated values
           console.log('[App] defaultAllowAll or allowedCountries changed, updating overlay', { 
             defaultAllowAll, 
             allowedCount: allowedCountries.size,
+            allowedCountriesArray: Array.from(allowedCountries).slice(0, 10), // First 10 for debugging
+            countryDataLoaded,
             note: 'Using latest state values from closure'
           });
           // updateCountryOverlay is a useCallback, so it will use the latest defaultAllowAll and allowedCountries
@@ -389,11 +454,28 @@ const App: React.FC = () => {
           console.warn('[App] Countries source not ready yet for overlay update');
         }
       } else {
-        console.warn('[App] Map not ready yet for overlay update');
+        console.warn('[App] Map not ready yet for overlay update', {
+          loaded: map.current?.loaded(),
+          styleLoaded: map.current?.isStyleLoaded()
+        });
       }
-    }, 300); // Increased delay to ensure React state has fully updated and propagated
+    }, 500); // Increased delay to ensure React state has fully updated and propagated
     return () => clearTimeout(timer);
-  }, [defaultAllowAll, allowedCountries, updateCountryOverlay]);
+  }, [defaultAllowAll, allowedCountries, updateCountryOverlay, countryDataLoaded]);
+
+  // Also update overlay when countryDataLoaded becomes true (for initial load)
+  useEffect(() => {
+    if (countryDataLoaded && map.current && map.current.getSource('countries')) {
+      console.log('[App] Country data just loaded, updating overlay');
+      // Use a small delay to ensure state has propagated
+      const timer = setTimeout(() => {
+        if (map.current && map.current.getSource('countries')) {
+          updateCountryOverlay();
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [countryDataLoaded, updateCountryOverlay]);
 
   // Define loadCountryOverlay (uses updateCountryOverlay)
   const loadCountryOverlay = useCallback(async () => {
@@ -453,20 +535,10 @@ const App: React.FC = () => {
             }
           }
           
-          let allowed: boolean;
-          
-          if (countryCode) {
-            const code = typeof countryCode === 'string' ? parseInt(countryCode, 10) : countryCode;
-            if (defaultAllowAll) {
-              allowed = !allowedCountries.has(code);
-            } else {
-              allowed = allowedCountries.has(code);
-            }
-          } else {
-            allowed = defaultAllowAll;
-          }
-          
-          feature.properties.allowed = Boolean(allowed);
+          // Don't set allowed here - it will be set by updateCountryOverlay after data is loaded
+          // This prevents race conditions where overlay is initialized before policy data is loaded
+          // Set to undefined initially, updateCountryOverlay will set it properly
+          feature.properties.allowed = undefined;
         });
       }
 
@@ -578,15 +650,26 @@ const App: React.FC = () => {
         return;
       }
       
+      // Ensure mapStyle has the full URL format
+      const initialStyle = mapStyle && mapStyle.startsWith('mapbox://') 
+        ? mapStyle 
+        : `mapbox://styles/mapbox/${mapStyle || 'light-v11'}`;
+      
       map.current = new mapboxgl.Map({
         container: container,
-        style: 'mapbox://styles/mapbox/light-v11',
-        projection: 'globe',
+        style: initialStyle,
         center: [0, 0],
-            zoom: 2,
-            // Set initial zoom for logo visibility
-            // Logo will be visible at zoom <= 4
+        zoom: 2,
+        pitch: pitch,
+        bearing: bearing,
+        // Set initial zoom for logo visibility
+        // Logo will be visible at zoom <= 4
       });
+      
+      // Update state to ensure it has the full URL format
+      if (!mapStyle.startsWith('mapbox://')) {
+        setMapStyle(initialStyle);
+      }
 
       const handleMapLoad = () => {
         console.log('[App] Map loaded successfully');
@@ -595,9 +678,10 @@ const App: React.FC = () => {
           setMapZoom(map.current.getZoom());
           
           loadCountryOverlay().then(() => {
-            // After overlay is loaded, the useEffect watching defaultAllowAll/allowedCountries
-            // will automatically call updateCountryOverlay when state updates from loadData
-            console.log('[App] Country overlay loaded - will update when policy state is ready');
+            console.log('[App] Country overlay loaded - will be updated when country data is loaded');
+            // Don't update overlay here - let the useEffect that watches countryDataLoaded handle it
+            // This ensures we don't update with stale/empty data
+            // The useEffect at line 427 will call updateCountryOverlay when countryDataLoaded becomes true
           });
           // NFT markers will be rendered automatically via useEffect when nearbyNFTs changes
           // Admin check will happen automatically via useEffect when wallet and client are ready
@@ -605,8 +689,23 @@ const App: React.FC = () => {
       };
       map.current.on('load', handleMapLoad);
 
-      map.current.on('error', (e) => {
+      map.current.on('error', (e: any) => {
         console.error('[App] Map error:', e);
+        if (e.error && e.error.message) {
+          console.error('[App] Map error details:', e.error.message);
+        }
+        // If style loading fails, try to fallback to a working style
+        if (e.error && e.error.message && e.error.message.includes('style')) {
+          console.warn('[App] Map style error detected, attempting fallback to streets-v12');
+          if (map.current) {
+            try {
+              map.current.setStyle('mapbox://styles/mapbox/streets-v12');
+              setMapStyle('mapbox://styles/mapbox/streets-v12');
+            } catch (fallbackError) {
+              console.error('[App] Fallback style also failed:', fallbackError);
+            }
+          }
+        }
       });
 
       // Track zoom level for logo visibility
@@ -624,7 +723,78 @@ const App: React.FC = () => {
 
       map.current.on('style.load', () => {
         console.log('[App] Map style loaded');
+        // Reload country policy data and overlay after style change
+        // Create a new ReadOnlyContractClient to fetch fresh data
+        const reloadCountryData = async () => {
+          try {
+            // Create a new client instance to fetch fresh data
+            const client = new ReadOnlyContractClient();
+            let defaultAllowAll = false;
+            let allowedCount = 0;
+            
+            // Get country policy
+            try {
+              const policyResult = await client.getCountryPolicy();
+              if (Array.isArray(policyResult) && policyResult.length >= 3) {
+                [defaultAllowAll, allowedCount] = policyResult;
+                setDefaultAllowAll(defaultAllowAll);
+                console.log('[App] Country policy reloaded after style change:', { defaultAllowAll, allowedCount });
+              }
+            } catch (error: any) {
+              console.warn('[App] Failed to reload country policy after style change:', error);
+            }
+            
+            // Get allowed countries list
+            try {
+              const pageSize = allowedCount > 0 ? Math.min(allowedCount, 1000) : 1000;
+              const listResult = await client.listAllowedCountries(0, pageSize);
+              if (Array.isArray(listResult)) {
+                setAllowedCountries(new Set(listResult));
+                console.log('[App] Allowed countries list reloaded after style change:', listResult.length, 'countries');
+              }
+            } catch (error: any) {
+              console.warn('[App] Failed to reload allowed countries list after style change:', error);
+            }
+            
+            // Then reload the overlay
+            loadCountryOverlay().then(() => {
+              console.log('[App] Country overlay reloaded after style change');
+              // Update overlay with current policy
+              setTimeout(() => {
+                updateCountryOverlay();
+              }, 300);
+            });
+          } catch (error) {
+            console.error('[App] Error reloading country data after style change:', error);
+            // Fallback: just reload overlay
+            loadCountryOverlay().then(() => {
+              setTimeout(() => {
+                updateCountryOverlay();
+              }, 200);
+            });
+          }
+        };
+        
+        reloadCountryData();
       });
+      
+      // Add Navigation Control (zoom in/out) - position below search/settings
+      const navControl = new mapboxgl.NavigationControl({
+        showCompass: true,
+        showZoom: true,
+        visualizePitch: true
+      });
+      map.current.addControl(navControl, 'bottom-right');
+      
+      // Add Geolocate Control (my location) - position below navigation control
+      const geolocateControl = new mapboxgl.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true,
+        showUserHeading: true
+      });
+      map.current.addControl(geolocateControl, 'bottom-right');
     } catch (error) {
       console.error('[App] Failed to initialize map:', error);
     }
@@ -753,6 +923,7 @@ const App: React.FC = () => {
           position: relative;
           width: 24px;
           height: 24px;
+          transform: translate(-50%, -50%);
         `;
         el.title = `${session.player1} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
@@ -799,6 +970,7 @@ const App: React.FC = () => {
           position: relative;
           width: 24px;
           height: 24px;
+          transform: translate(-50%, -50%);
         `;
         el.title = `${session.player2} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
@@ -928,10 +1100,12 @@ const App: React.FC = () => {
             console.log('[App] Successfully loaded', listResult.length, 'allowed countries');
             setAllowedCountries(new Set(listResult));
             countriesLoaded = true;
+            setCountryDataLoaded(true); // Mark data as loaded
           } else {
             console.log('[App] No allowed countries in list (empty array)');
             setAllowedCountries(new Set());
             countriesLoaded = true; // Still mark as loaded, just empty
+            setCountryDataLoaded(true); // Mark data as loaded
           }
         } else if (listResult === null) {
           // XDR parsing error - contract client now returns null gracefully
@@ -964,10 +1138,11 @@ const App: React.FC = () => {
         if (!policyLoaded) {
           // If we can't load policy or countries, default to showing all countries
           // This allows the map to be usable even when contract calls fail
-          console.log('[App] Could not load country policy or list - defaulting to show all countries');
-          setDefaultAllowAll(true);
-          setAllowedCountries(new Set());
-          // The useEffect that watches defaultAllowAll and allowedCountries will automatically call updateCountryOverlay
+            console.log('[App] Could not load country policy or list - defaulting to show all countries');
+            setDefaultAllowAll(true);
+            setAllowedCountries(new Set());
+            setCountryDataLoaded(true); // Mark data as loaded even if we defaulted
+            // The useEffect that watches defaultAllowAll and allowedCountries will automatically call updateCountryOverlay
         }
       }
       
@@ -978,8 +1153,35 @@ const App: React.FC = () => {
         countriesLoaded, 
         defaultAllowAll: finalDefaultAllowAll, 
         allowedCount,
-        note: 'State will update asynchronously - useEffect will trigger updateCountryOverlay when defaultAllowAll changes'
+        note: 'State will update asynchronously - will trigger updateCountryOverlay when ready'
       });
+      
+      // Mark data as loaded - this will trigger the useEffect to update overlay
+      setCountryDataLoaded(true);
+      
+      // Explicitly update overlay after data is loaded and state has updated
+      // Use a longer delay to ensure React state has fully propagated
+      setTimeout(() => {
+        if (map.current && map.current.getSource('countries')) {
+          console.log('[App] Explicitly updating country overlay after data load', {
+            defaultAllowAll,
+            allowedCount: allowedCountries.size
+          });
+          updateCountryOverlay();
+        } else {
+          console.log('[App] Countries source not ready yet, will update when map is ready');
+          // If overlay not ready, wait for it
+          const waitForOverlay = () => {
+            if (map.current && map.current.getSource('countries')) {
+              console.log('[App] Countries source now ready, updating overlay');
+              updateCountryOverlay();
+            } else if (map.current) {
+              setTimeout(waitForOverlay, 100);
+            }
+          };
+          waitForOverlay();
+        }
+      }, 600); // Delay to ensure state has fully updated
     };
     
     loadData();
@@ -1032,6 +1234,15 @@ const App: React.FC = () => {
 
   const updateOtherUserMarkers = useCallback((users: Array<{ id: string; location: [number, number]; distance: number }>) => {
     if (!map.current) return;
+
+    // Create a hash of user data to detect actual changes
+    const usersHash = JSON.stringify(users.map(u => ({ id: u.id, location: u.location })).sort((a, b) => a.id.localeCompare(b.id)));
+    
+    // Skip if data hasn't changed
+    if (previousUserMarkersRef.current === usersHash && showOtherUsers) {
+      return;
+    }
+    previousUserMarkersRef.current = usersHash;
 
     if (!showOtherUsers) {
       // Only clear if we're hiding users
@@ -1087,20 +1298,25 @@ const App: React.FC = () => {
       }
 
       users.forEach(user => {
+        if (!mapFilters.showUsers) return; // Skip if users filter is off
+        
         const el = document.createElement('div');
         el.className = 'marker marker-opponent other-user-marker';
         el.innerHTML = `<div class="marker-distance">${user.distance.toFixed(1)} km</div>`;
         // Match contract marker CSS to prevent movement on zoom
         // Override position: relative from .marker class with flex properties
         // Important: Keep position: relative for marker-distance positioning, but add flex for centering
+        // Fix marker positioning - Mapbox markers need proper centering
         el.style.cssText = `
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          position: relative;
+          position: absolute;
           width: 24px;
           height: 24px;
+          transform: translate(-50%, -50%);
+          pointer-events: auto;
         `;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -1181,7 +1397,7 @@ const App: React.FC = () => {
     };
 
     addMarkers();
-  }, [showOtherUsers]);
+  }, [showOtherUsers, mapFilters.showUsers]);
 
   // Render NFT markers on the map (matching xyz-wallet pattern)
   const renderNFTMarkers = useCallback(() => {
@@ -1225,6 +1441,7 @@ const App: React.FC = () => {
     
     // Add markers for nearby NFTs
     nearbyNFTs.forEach((nft) => {
+      if (!mapFilters.showNFTs) return; // Skip if NFTs filter is off
       if (nft.latitude && nft.longitude) {
         // Construct image URL using the helper function (matching xyz-wallet)
         const imageUrl = constructImageUrl(nft.server_url, nft.ipfs_hash) || nft.image_url || 'https://via.placeholder.com/64x64?text=NFT';
@@ -1247,6 +1464,9 @@ const App: React.FC = () => {
           display: flex;
           align-items: center;
           justify-content: center;
+          position: absolute;
+          transform: translate(-50%, -50%);
+          pointer-events: auto;
         `;
         // Add fallback if image fails to load
         const img = new Image();
@@ -1335,7 +1555,7 @@ const App: React.FC = () => {
         }
       }
     });
-  }, [nearbyNFTs]);
+  }, [nearbyNFTs, mapFilters.showNFTs]);
 
   // Update NFT markers when nearbyNFTs changes
   useEffect(() => {
@@ -1388,10 +1608,17 @@ const App: React.FC = () => {
     }
     contractCirclesRef.current = [];
     
-    // Ensure map is loaded before adding markers
-    if (!map.current.loaded()) {
-      console.log('[App] renderContractMarkers: Map not loaded yet, waiting for load event');
-      map.current.once('load', renderContractMarkers);
+    // Ensure map is fully loaded and style is loaded before adding markers
+    if (!map.current.loaded() || !map.current.isStyleLoaded()) {
+      console.log('[App] renderContractMarkers: Map not fully ready, waiting...', {
+        loaded: map.current.loaded(),
+        styleLoaded: map.current.isStyleLoaded()
+      });
+      if (!map.current.loaded()) {
+        map.current.once('load', renderContractMarkers);
+      } else {
+        map.current.once('style.load', renderContractMarkers);
+      }
       return;
     }
     
@@ -1401,6 +1628,8 @@ const App: React.FC = () => {
     console.log('[App] Processing', nearbyContracts.length, 'contracts for markers');
     
     nearbyContracts.forEach((contract, index) => {
+      if (!mapFilters.showContracts) return; // Skip if contracts filter is off
+      
       // Validate coordinates
       const lat = typeof contract.latitude === 'number' ? contract.latitude : parseFloat(String(contract.latitude || ''));
       const lng = typeof contract.longitude === 'number' ? contract.longitude : parseFloat(String(contract.longitude || ''));
@@ -1432,6 +1661,9 @@ const App: React.FC = () => {
             justify-content: center;
             font-size: 36px;
             color: white;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
           `;
           el.innerHTML = '🧮';
           el.title = contract.name || 'Smart Contract';
@@ -1542,9 +1774,9 @@ const App: React.FC = () => {
       mapLoaded: map.current ? map.current.loaded() : false,
       mapStyleLoaded: map.current ? map.current.isStyleLoaded() : false
     });
-  }, [nearbyContracts]);
+  }, [nearbyContracts, mapFilters.showContracts]);
 
-  // Update contract markers when nearbyContracts changes
+  // Update contract markers when nearbyContracts changes - use same batching pattern as NFTs
   useEffect(() => {
     // Use a small timeout to batch updates and prevent flickering
     const timeoutId = setTimeout(() => {
@@ -1553,19 +1785,36 @@ const App: React.FC = () => {
         return;
       }
       
+      // Create a hash of contract data to detect actual changes
+      const contractsHash = JSON.stringify(nearbyContracts.map(c => ({ 
+        name: c.name, 
+        latitude: c.latitude, 
+        longitude: c.longitude 
+      })).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+      
+      // Skip if data hasn't changed
+      if (previousContractMarkersRef.current === contractsHash) {
+        return;
+      }
+      previousContractMarkersRef.current = contractsHash;
+      
       if (nearbyContracts.length > 0) {
         console.log('[App] Rendering', nearbyContracts.length, 'contract markers');
-        // Wait for map to be fully loaded before rendering markers
-        const renderWhenReady = () => {
-          if (map.current && map.current.loaded() && map.current.isStyleLoaded()) {
-            console.log('[App] Map ready, rendering contract markers');
-            renderContractMarkers();
-          } else {
-            // Retry after a short delay
-            setTimeout(renderWhenReady, 100);
-          }
-        };
-        renderWhenReady();
+        // Ensure map is ready before rendering
+        if (map.current && map.current.loaded() && map.current.isStyleLoaded()) {
+          renderContractMarkers();
+        } else {
+          console.log('[App] Map not ready for contract markers, will retry when ready');
+          // Wait for map to be ready
+          const waitForMap = () => {
+            if (map.current && map.current.loaded() && map.current.isStyleLoaded()) {
+              renderContractMarkers();
+            } else if (map.current) {
+              setTimeout(waitForMap, 100);
+            }
+          };
+          waitForMap();
+        }
       } else {
         // Clear markers when no contracts
         contractMarkersRef.current.forEach(marker => marker.remove());
@@ -1586,7 +1835,7 @@ const App: React.FC = () => {
       }
     }, 0);
     return () => clearTimeout(timeoutId);
-  }, [nearbyContracts, renderContractMarkers]);
+  }, [nearbyContracts, renderContractMarkers, mapFilters.showContracts]);
 
   const fetchOtherUsers = useCallback(async (playerLoc: [number, number]) => {
     if (!showOtherUsers || !playerLoc) return;
@@ -1663,6 +1912,12 @@ const App: React.FC = () => {
       
       setOtherUsers(uniqueUsers);
       
+      // Update markers on map - debounced to prevent flickering
+      // Use setTimeout to batch the update (similar to NFT markers)
+      setTimeout(() => {
+        updateOtherUserMarkers(uniqueUsers);
+      }, 0);
+      
       // Also fetch nearby NFTs and contracts
       const [nfts, contracts] = await Promise.all([
         geolinkApi.getNearbyNFTs(playerLoc[1], playerLoc[0], maxDistance * 1000).catch((err) => {
@@ -1687,6 +1942,8 @@ const App: React.FC = () => {
           lngType: typeof contracts[0].longitude,
           fullContract: contracts[0]
         });
+      } else {
+        console.log('[App] No contracts fetched from GeoLink API');
       }
       
       setNearbyNFTs(nfts);
@@ -1700,8 +1957,7 @@ const App: React.FC = () => {
         contracts: contracts.length 
       });
       
-      // Update markers on map
-      updateOtherUserMarkers(uniqueUsers);
+      // Markers are already updated above with setTimeout debouncing
     } catch (error) {
       console.error('[App] Failed to fetch nearby users:', error);
       // Fallback to empty array on error
@@ -1710,9 +1966,29 @@ const App: React.FC = () => {
   }, [showOtherUsers, maxDistance, updateOtherUserMarkers, activeSessions, walletAddress]);
 
   // Fetch nearby users, NFTs, and contracts when location changes or active sessions update
+  // Debounce to prevent flickering
   useEffect(() => {
     if (playerLocation && showOtherUsers) {
-      fetchOtherUsers(playerLocation);
+      // Clear existing timeout
+      if (markerUpdateTimeoutRef.current) {
+        clearTimeout(markerUpdateTimeoutRef.current);
+      }
+      
+      // Debounce marker updates (500ms delay)
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastMarkerUpdateRef.current;
+      const delay = timeSinceLastUpdate < 500 ? 500 - timeSinceLastUpdate : 0;
+      
+      markerUpdateTimeoutRef.current = setTimeout(() => {
+        lastMarkerUpdateRef.current = Date.now();
+        fetchOtherUsers(playerLocation);
+      }, delay);
+      
+      return () => {
+        if (markerUpdateTimeoutRef.current) {
+          clearTimeout(markerUpdateTimeoutRef.current);
+        }
+      };
     }
   }, [playerLocation, showOtherUsers, fetchOtherUsers, activeSessions]);
   
@@ -2739,6 +3015,366 @@ const App: React.FC = () => {
           />
         </div>
       )}
+      
+      {/* Map Settings Controller - Top Right */}
+      <div style={{
+        position: 'absolute',
+        top: '16px',
+        right: '16px',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        alignItems: 'flex-end'
+      }}>
+        {/* Search Button */}
+        <button
+          onClick={() => setShowSearch(!showSearch)}
+          style={{
+            backgroundColor: 'white',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+          title="Search Location"
+        >
+          🔍 Search
+        </button>
+        
+        {/* Settings Button */}
+        <button
+          onClick={() => setShowMapSettings(!showMapSettings)}
+          style={{
+            backgroundColor: 'white',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+          title="Map Settings"
+        >
+          ⚙️ Settings
+        </button>
+        
+        {/* Search Panel */}
+        {showSearch && (
+          <div style={{
+            backgroundColor: 'white',
+            border: '1px solid #ccc',
+            borderRadius: '8px',
+            padding: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            minWidth: '300px',
+            maxWidth: '400px'
+          }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  // Debounce search
+                  if (markerUpdateTimeoutRef.current) {
+                    clearTimeout(markerUpdateTimeoutRef.current);
+                  }
+                  markerUpdateTimeoutRef.current = setTimeout(async () => {
+                    if (e.target.value.length > 2) {
+                      try {
+                        const response = await fetch(
+                          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(e.target.value)}.json?access_token=${mapboxgl.accessToken}&limit=5`
+                        );
+                        const data = await response.json();
+                        setSearchResults(data.features || []);
+                      } catch (error) {
+                        console.error('Search error:', error);
+                        setSearchResults([]);
+                      }
+                    } else {
+                      setSearchResults([]);
+                    }
+                  }, 300);
+                }}
+                placeholder="Search for a location..."
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+              />
+              <button
+                onClick={() => {
+                  setShowSearch(false);
+                  setSearchQuery('');
+                  setSearchResults([]);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: '#f0f0f0',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            {searchResults.length > 0 && (
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {searchResults.map((result: any, idx: number) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      const [lng, lat] = result.center;
+                      if (map.current) {
+                        map.current.flyTo({
+                          center: [lng, lat],
+                          zoom: 12,
+                          duration: 1500
+                        });
+                      }
+                      setShowSearch(false);
+                      setSearchQuery('');
+                      setSearchResults([]);
+                    }}
+                    style={{
+                      padding: '8px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #eee',
+                      fontSize: '13px'
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#f0f0f0';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = 'white';
+                    }}
+                  >
+                    <div style={{ fontWeight: 'bold' }}>{result.text}</div>
+                    <div style={{ fontSize: '11px', color: '#666' }}>{result.place_name}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Settings Panel */}
+        {showMapSettings && (
+          <div style={{
+            backgroundColor: 'white',
+            border: '1px solid #ccc',
+            borderRadius: '8px',
+            padding: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            minWidth: '250px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px' }}>Map Settings</h3>
+              <button
+                onClick={() => setShowMapSettings(false)}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: '#f0f0f0',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* Map Style */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', fontWeight: 'bold' }}>Map Style:</label>
+              <select
+                value={mapStyle}
+                onChange={(e) => {
+                  const newStyle = e.target.value;
+                  setMapStyle(newStyle);
+                  if (map.current) {
+                    try {
+                      map.current.setStyle(newStyle);
+                    } catch (error) {
+                      console.error('[App] Error setting map style:', error);
+                      // Fallback to default style if error occurs
+                      const fallbackStyle = 'mapbox://styles/mapbox/light-v11';
+                      map.current.setStyle(fallbackStyle);
+                      setMapStyle(fallbackStyle);
+                    }
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '13px'
+                }}
+              >
+                <option value="mapbox://styles/mapbox/satellite-streets-v12">Satellite Streets</option>
+                <option value="mapbox://styles/mapbox/streets-v12">Streets</option>
+                <option value="mapbox://styles/mapbox/outdoors-v12">Outdoors</option>
+                <option value="mapbox://styles/mapbox/light-v11">Light</option>
+                <option value="mapbox://styles/mapbox/dark-v11">Dark</option>
+              </select>
+            </div>
+            
+            {/* Filters */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold' }}>Show Markers:</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={mapFilters.showUsers}
+                    onChange={(e) => setMapFilters({ ...mapFilters, showUsers: e.target.checked })}
+                  />
+                  Users
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={mapFilters.showNFTs}
+                    onChange={(e) => setMapFilters({ ...mapFilters, showNFTs: e.target.checked })}
+                  />
+                  NFTs
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={mapFilters.showContracts}
+                    onChange={(e) => setMapFilters({ ...mapFilters, showContracts: e.target.checked })}
+                  />
+                  Smart Contracts
+                </label>
+              </div>
+            </div>
+            
+            {/* 3D Controls */}
+            <div style={{ marginBottom: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold' }}>3D Features:</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={enable3D}
+                    onChange={(e) => {
+                      setEnable3D(e.target.checked);
+                      if (map.current) {
+                        if (e.target.checked) {
+                          map.current.easeTo({ pitch: 60, bearing: 0, duration: 1000 });
+                          setPitch(60);
+                        } else {
+                          map.current.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
+                          setPitch(0);
+                        }
+                      }
+                    }}
+                  />
+                  Enable 3D View
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={showBuildings}
+                    onChange={(e) => {
+                      setShowBuildings(e.target.checked);
+                      if (map.current && map.current.isStyleLoaded()) {
+                        const style = map.current.getStyle();
+                        if (style && style.layers) {
+                          style.layers.forEach((layer: any) => {
+                            if (layer.id && layer.id.includes('building')) {
+                              try {
+                                map.current!.setLayoutProperty(layer.id, 'visibility', e.target.checked ? 'visible' : 'none');
+                              } catch (err) {
+                                // Layer might not exist in this style
+                              }
+                            }
+                          });
+                        }
+                      }
+                    }}
+                  />
+                  Show 3D Buildings
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={showTerrain}
+                    onChange={(e) => {
+                      setShowTerrain(e.target.checked);
+                      if (map.current && map.current.isStyleLoaded()) {
+                        try {
+                          if (e.target.checked) {
+                            map.current.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+                          } else {
+                            map.current.setTerrain(null);
+                          }
+                        } catch (err) {
+                          console.warn('[App] Terrain not available in this style:', err);
+                        }
+                      }
+                    }}
+                  />
+                  Show Terrain
+                </label>
+              </div>
+              {enable3D && (
+                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px' }}>
+                    Pitch: {pitch}°
+                    <input
+                      type="range"
+                      min="0"
+                      max="60"
+                      value={pitch}
+                      onChange={(e) => {
+                        const newPitch = parseInt(e.target.value);
+                        setPitch(newPitch);
+                        if (map.current) {
+                          map.current.setPitch(newPitch);
+                        }
+                      }}
+                      style={{ width: '100%', marginTop: '4px' }}
+                    />
+                  </label>
+                  <label style={{ fontSize: '12px' }}>
+                    Bearing: {bearing}°
+                    <input
+                      type="range"
+                      min="-180"
+                      max="180"
+                      value={bearing}
+                      onChange={(e) => {
+                        const newBearing = parseInt(e.target.value);
+                        setBearing(newBearing);
+                        if (map.current) {
+                          map.current.setBearing(newBearing);
+                        }
+                      }}
+                      style={{ width: '100%', marginTop: '4px' }}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       
       <div className={`overlay ${overlayMinimized && wallet ? 'minimized' : ''} ${!wallet ? 'no-wallet' : ''}`}>
         <div className="overlay-header">
