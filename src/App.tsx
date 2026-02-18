@@ -1889,41 +1889,17 @@ const App: React.FC = () => {
         }
       }
       
-      // Also try to fetch from GeoLink API (may not be available)
-      let geolinkUsers: NearbyUser[] = [];
-      try {
-        geolinkUsers = await geolinkApi.getNearbyUsers(
-          playerLoc[1], // latitude
-          playerLoc[0], // longitude
-          maxDistance * 1000 // convert km to meters
-        );
-      } catch (error) {
-        // GeoLink nearby users endpoint may not exist - that's OK
-        console.log('[App] GeoLink nearby users not available, using session users only');
-      }
+      // Note: GeoLink API does not have a nearby users endpoint
+      // We handle nearby users ourselves based on active sessions
+      // Location updates are sent to GeoLink, but we discover users via sessions
       
-      // Convert GeoLink users to our format
-      const formattedGeolinkUsers = geolinkUsers.map((user: NearbyUser) => ({
-        id: user.public_key,
-        location: [user.longitude, user.latitude] as [number, number],
-        distance: user.distance / 1000, // convert meters to km
-        publicKey: user.public_key,
-        walletType: user.wallet_type,
-        description: user.description,
-      }));
-      
-      // Combine session users and GeoLink users, removing duplicates
-      const allUsers = [...sessionUsers, ...formattedGeolinkUsers];
-      const uniqueUsers = allUsers.filter((user, index, self) => 
-        index === self.findIndex(u => u.publicKey === user.publicKey)
-      );
-      
-      setOtherUsers(uniqueUsers);
+      // Use session-based users (already calculated above)
+      setOtherUsers(sessionUsers);
       
       // Update markers on map - debounced to prevent flickering
       // Use setTimeout to batch the update (similar to NFT markers)
       setTimeout(() => {
-        updateOtherUserMarkers(uniqueUsers);
+        updateOtherUserMarkers(sessionUsers);
       }, 0);
       
       // Also fetch nearby NFTs and contracts
@@ -1959,8 +1935,7 @@ const App: React.FC = () => {
       
       console.log('[App] Fetched nearby users:', { 
         fromSessions: sessionUsers.length,
-        fromGeoLink: formattedGeolinkUsers.length,
-        total: uniqueUsers.length,
+        total: sessionUsers.length,
         nfts: nfts.length, 
         contracts: contracts.length 
       });

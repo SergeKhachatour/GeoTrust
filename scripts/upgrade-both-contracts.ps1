@@ -250,9 +250,16 @@ Write-Info "=== Upgrading GeoTrust Match Contract ==="
 Write-Host ""
 
 $ContractDir = Join-Path $ProjectRoot "contracts\geotrust-match"
-$BuildDir = Join-Path $ContractDir "target\wasm32-unknown-unknown\release"
-$WasmFile = Join-Path $BuildDir "geotrust_match.wasm"
-$WasmOptimized = Join-Path $BuildDir "geotrust_match_optimized.wasm"
+# Define both possible target directories
+$Wasm32v1Dir = Join-Path $ContractDir "target\wasm32v1-none\release"
+$Wasm32UnknownDir = Join-Path $ContractDir "target\wasm32-unknown-unknown\release"
+$WasmFileV1 = Join-Path $Wasm32v1Dir "geotrust_match.wasm"
+$WasmFileUnknown = Join-Path $Wasm32UnknownDir "geotrust_match.wasm"
+
+# Variables will be set after build based on which directory has the file
+$BuildDir = $null
+$WasmFile = $null
+$WasmOptimized = $null
 
 # Step 1: Build the contract
 Write-Info "Step 1: Building GeoTrust Match contract..."
@@ -268,6 +275,22 @@ try {
     Pop-Location
 }
 Write-Host ""
+
+# After build, check which directory actually has the WASM file
+if (Test-Path $WasmFileV1) {
+    $BuildDir = $Wasm32v1Dir
+    $WasmFile = $WasmFileV1
+    $WasmOptimized = Join-Path $Wasm32v1Dir "geotrust_match_optimized.wasm"
+} elseif (Test-Path $WasmFileUnknown) {
+    $BuildDir = $Wasm32UnknownDir
+    $WasmFile = $WasmFileUnknown
+    $WasmOptimized = Join-Path $Wasm32UnknownDir "geotrust_match_optimized.wasm"
+} else {
+    Write-Error "WASM file not found after build!"
+    Write-Error "  Checked: $WasmFileV1"
+    Write-Error "  Checked: $WasmFileUnknown"
+    exit 1
+}
 
 # Step 2: Check if optimization is available
 $WasmToUse = $WasmFile
@@ -380,9 +403,16 @@ if (-not [string]::IsNullOrEmpty($ZkVerifierContractId)) {
     Write-Host ""
 
     $ContractDir = Join-Path $ProjectRoot "contracts\zk-verifier"
-    $BuildDir = Join-Path $ContractDir "target\wasm32-unknown-unknown\release"
-    $WasmFile = Join-Path $BuildDir "zk_verifier.wasm"
-    $WasmOptimized = Join-Path $BuildDir "zk_verifier_optimized.wasm"
+    # Define both possible target directories
+    $Wasm32v1Dir = Join-Path $ContractDir "target\wasm32v1-none\release"
+    $Wasm32UnknownDir = Join-Path $ContractDir "target\wasm32-unknown-unknown\release"
+    $WasmFileV1 = Join-Path $Wasm32v1Dir "zk_verifier.wasm"
+    $WasmFileUnknown = Join-Path $Wasm32UnknownDir "zk_verifier.wasm"
+    
+    # Variables will be set after build based on which directory has the file
+    $BuildDir = $null
+    $WasmFile = $null
+    $WasmOptimized = $null
 
     # Step 1: Build the contract
     Write-Info "Step 1: Building ZK Verifier contract..."
@@ -398,6 +428,22 @@ if (-not [string]::IsNullOrEmpty($ZkVerifierContractId)) {
         Pop-Location
     }
     Write-Host ""
+
+    # After build, check which directory actually has the WASM file
+    if (Test-Path $WasmFileV1) {
+        $BuildDir = $Wasm32v1Dir
+        $WasmFile = $WasmFileV1
+        $WasmOptimized = Join-Path $Wasm32v1Dir "zk_verifier_optimized.wasm"
+    } elseif (Test-Path $WasmFileUnknown) {
+        $BuildDir = $Wasm32UnknownDir
+        $WasmFile = $WasmFileUnknown
+        $WasmOptimized = Join-Path $Wasm32UnknownDir "zk_verifier_optimized.wasm"
+    } else {
+        Write-Error "WASM file not found after build!"
+        Write-Error "  Checked: $WasmFileV1"
+        Write-Error "  Checked: $WasmFileUnknown"
+        exit 1
+    }
 
     # Step 2: Check if optimization is available
     $WasmToUse = $WasmFile

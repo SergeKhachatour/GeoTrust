@@ -110,7 +110,8 @@ class GeoLinkApiClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
-    useWalletProviderKey: boolean = false
+    useWalletProviderKey: boolean = false,
+    suppressErrorLogging: boolean = false
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const apiKey = useWalletProviderKey ? this.walletProviderKey : this.dataConsumerKey;
@@ -142,16 +143,18 @@ class GeoLinkApiClient {
       });
     }
 
-    // Debug logging (similar to xyz-wallet)
-    console.log(`[GeoLinkAPI] Request to ${endpoint}:`, {
-      url,
-      method: options.method || 'GET',
-      hasApiKey: true,
-      apiKeyLength: apiKey.trim().length,
-      apiKeyPreview: `${apiKey.trim().substring(0, 8)}...${apiKey.trim().substring(apiKey.trim().length - 4)}`,
-      useWalletProviderKey,
-      headersKeys: Object.keys(headers),
-    });
+    // Debug logging (similar to xyz-wallet) - skip for endpoints that may not be available
+    if (!suppressErrorLogging) {
+      console.log(`[GeoLinkAPI] Request to ${endpoint}:`, {
+        url,
+        method: options.method || 'GET',
+        hasApiKey: true,
+        apiKeyLength: apiKey.trim().length,
+        apiKeyPreview: `${apiKey.trim().substring(0, 8)}...${apiKey.trim().substring(apiKey.trim().length - 4)}`,
+        useWalletProviderKey,
+        headersKeys: Object.keys(headers),
+      });
+    }
 
     try {
       // Create fetch options - ensure headers are set correctly
@@ -179,18 +182,20 @@ class GeoLinkApiClient {
           }
         }
         
-        // Log detailed error information
-        console.error(`[GeoLinkAPI] Request failed for ${endpoint}:`, {
-          status: response.status,
-          statusText: response.statusText,
-          errorMessage,
-          errorDetails,
-          url,
-          method: options.method || 'GET',
-          apiKeyLength: apiKey.trim().length,
-          apiKeyPreview: `${apiKey.trim().substring(0, 4)}...${apiKey.trim().substring(apiKey.trim().length - 4)}`,
-          useWalletProviderKey,
-        });
+        // Log detailed error information (unless suppressed for expected failures)
+        if (!suppressErrorLogging) {
+          console.error(`[GeoLinkAPI] Request failed for ${endpoint}:`, {
+            status: response.status,
+            statusText: response.statusText,
+            errorMessage,
+            errorDetails,
+            url,
+            method: options.method || 'GET',
+            apiKeyLength: apiKey.trim().length,
+            apiKeyPreview: `${apiKey.trim().substring(0, 4)}...${apiKey.trim().substring(apiKey.trim().length - 4)}`,
+            useWalletProviderKey,
+          });
+        }
         
         // Special handling for 401 (Unauthorized)
         if (response.status === 401) {
@@ -251,43 +256,24 @@ class GeoLinkApiClient {
   }
 
   /**
-   * Get nearby wallets/users (uses Data Consumer key)
+   * Get nearby wallets/users
+   * NOTE: GeoLink API does not have a nearby users endpoint
+   * This function is kept for interface compatibility but always returns empty array
+   * Nearby users should be handled by your own backend or session-based discovery
+   * 
+   * @deprecated GeoLink does not provide this endpoint. Use session-based user discovery instead.
    */
   async getNearbyUsers(
     latitude: number,
     longitude: number,
-    radius: number = 10000
+    radius: number = 10000,
+    publicKey?: string
   ): Promise<NearbyUser[]> {
-    console.log('[GeoLinkAPI] Fetching nearby users:', { latitude, longitude, radius });
-    // Match xyz-wallet pattern: use latitude/longitude parameter names
-    // Note: GeoLink may not have a nearby users endpoint - this might need to be removed
-    // or use a different endpoint like /api/wallets/nearby
-    try {
-      const response = await this.request<{ nearbyUsers?: NearbyUser[]; users?: NearbyUser[] }>(
-        `/api/location/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`,
-        {},
-        false // Use data consumer key
-      );
-      return response.nearbyUsers || response.users || [];
-    } catch (error: any) {
-      // If endpoint doesn't exist (404) or has missing parameters (400), return empty array
-      // This is non-critical - the app will use session-based users instead
-      if (
-        error.status === 400 ||
-        error.status === 404 ||
-        error.message?.includes('404') || 
-        error.message?.includes('not found') ||
-        error.message?.includes('400') ||
-        error.message?.includes('Missing required parameters') ||
-        error.message?.includes('Bad Request')
-      ) {
-        // Silently return empty array - this endpoint may not be available or may require different parameters
-        // The app will use session-based users instead
-        // Don't log - this is expected behavior
-        return [];
-      }
-      throw error;
-    }
+    // GeoLink API does not have a nearby users endpoint
+    // xyz-wallet handles this themselves via their own backend
+    // We should do the same - use session-based discovery or build our own backend
+    console.log('[GeoLinkAPI] getNearbyUsers called but GeoLink does not provide this endpoint. Use session-based discovery instead.');
+    return [];
   }
 
   /**
