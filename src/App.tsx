@@ -289,6 +289,9 @@ const App: React.FC = () => {
   const [showCountryManagementOverlay, setShowCountryManagementOverlay] = useState(false);
   const [showCountryProfileOverlay, setShowCountryProfileOverlay] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<{ code: number; name: string } | null>(null);
+  
+  // Session details overlay state
+  const [showSessionDetailsOverlay, setShowSessionDetailsOverlay] = useState(false);
   const [countryNameCache, setCountryNameCache] = useState<Map<number, string>>(new Map());
   
   // Refs for NFT and contract markers (matching xyz-wallet pattern)
@@ -3963,12 +3966,28 @@ const App: React.FC = () => {
                                     });
                                   } else if (session.state === 'Waiting') {
                                     // For Waiting sessions, call Game Hub's end_game directly
-                                    const gameHubId = process.env.REACT_APP_GAME_HUB_ID;
+                                    // Get Game Hub ID from contract instead of env
+                                    let gameHubId: string | null = null;
+                                    try {
+                                      if (readOnlyClient) {
+                                        gameHubId = await readOnlyClient.getGameHub();
+                                      } else if (contractClient) {
+                                        gameHubId = await contractClient.getGameHub();
+                                      }
+                                    } catch (error) {
+                                      console.warn('[App] Failed to get Game Hub from contract:', error);
+                                    }
+                                    
+                                    // Fallback to env if contract doesn't have it
+                                    if (!gameHubId) {
+                                      gameHubId = process.env.REACT_APP_GAME_HUB_ID || null;
+                                    }
+                                    
                                     if (!gameHubId) {
                                       setNotificationState({
                                         isOpen: true,
                                         title: 'Error',
-                                        message: 'Game Hub ID not configured. Cannot end waiting session.',
+                                        message: 'Game Hub ID not configured. Cannot end waiting session. Please set it in the admin panel.',
                                         type: 'error',
                                         autoClose: 5000,
                                       });

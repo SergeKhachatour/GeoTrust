@@ -1,0 +1,247 @@
+.session-details-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.session-details-modal {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border: 2px solid #FFD700;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 800px;
+  width: 90%;
+  max-height: 90vh;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: slideIn 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.session-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.session-details-header h2 {
+  margin: 0;
+  color: #FFD700;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.session-details-close {
+  background: none;
+  border: none;
+  color: #FFD700;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.session-details-close:hover {
+  background-color: rgba(255, 215, 0, 0.1);
+}
+
+.session-details-content {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.session-details-section {
+  margin-bottom: 32px;
+}
+
+.session-details-section:last-child {
+  margin-bottom: 0;
+}
+
+.session-details-section h3 {
+  color: #FFD700;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.session-info-card {
+  background: rgba(255, 215, 0, 0.05);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.session-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.session-info-row:last-child {
+  border-bottom: none;
+}
+
+.session-info-label {
+  color: #b0b0b0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.session-info-value {
+  color: #e0e0e0;
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+}
+
+.session-you-badge {
+  color: #FFD700;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.session-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.session-status-waiting {
+  background-color: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.session-status-active {
+  background-color: rgba(40, 167, 69, 0.2);
+  color: #28a745;
+}
+
+.session-status-ended {
+  background-color: rgba(108, 117, 125, 0.2);
+  color: #6c757d;
+}
+
+.session-empty-state {
+  text-align: center;
+  padding: 32px;
+  color: #b0b0b0;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+  transition: all 0.2s;
+}
+
+.session-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
+.session-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.session-item-id {
+  color: #FFD700;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.session-item-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.session-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.session-item-player {
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.session-item-player strong {
+  color: #b0b0b0;
+  margin-right: 8px;
+}
+
+.session-item-meta {
+  color: #888;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.session-join-button {
+  width: 100%;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.session-join-button:hover {
+  background: linear-gradient(135deg, #FFA500 0%, #FFD700 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+}
+
+.session-join-button:active {
+  transform: translateY(0);
+}
