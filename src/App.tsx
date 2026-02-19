@@ -1011,6 +1011,9 @@ const App: React.FC = () => {
     }
   }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
 
+  // Ref to store connectWallet function so it can be accessed in updateSessionMarkers
+  const connectWalletRef = useRef<(() => Promise<void>) | null>(null);
+
   // Convert cellId back to approximate coordinates (center of cell)
   const cellIdToCoordinates = (cellId: number, addRandomization: boolean = false): [number, number] => {
     const cellX = cellId % 360;
@@ -1079,9 +1082,11 @@ const App: React.FC = () => {
           if (!walletAddress) {
             if (window.confirm('Connect your wallet to view player details and join sessions!')) {
               // Trigger wallet connection
-              connectWallet().catch((error) => {
-                console.error('[App] Failed to connect wallet:', error);
-              });
+              if (connectWalletRef.current) {
+                connectWalletRef.current().catch((error) => {
+                  console.error('[App] Failed to connect wallet:', error);
+                });
+              }
             }
             return;
           }
@@ -1138,9 +1143,11 @@ const App: React.FC = () => {
           if (!walletAddress) {
             if (window.confirm('Connect your wallet to view player details and join sessions!')) {
               // Trigger wallet connection
-              connectWallet().catch((error) => {
-                console.error('[App] Failed to connect wallet:', error);
-              });
+              if (connectWalletRef.current) {
+                connectWalletRef.current().catch((error) => {
+                  console.error('[App] Failed to connect wallet:', error);
+                });
+              }
             }
             return;
           }
@@ -1170,7 +1177,7 @@ const App: React.FC = () => {
         }
       }
     });
-  }, [walletAddress, connectWallet]);
+  }, [walletAddress]);
   
   // Track if fetchActiveSessions is currently running to prevent concurrent executions
   const isFetchingSessionsRef = useRef(false);
@@ -2440,6 +2447,9 @@ const App: React.FC = () => {
       setWalletError(error.message || 'Failed to connect wallet. Please try again or select a different wallet.');
     }
   };
+  
+  // Store connectWallet in ref so it can be accessed in updateSessionMarkers
+  connectWalletRef.current = connectWallet;
 
   const disconnectWallet = async () => {
     try {
