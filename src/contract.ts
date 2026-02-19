@@ -490,6 +490,82 @@ export class ContractClient {
     return result as { matched: boolean; winner: string | null };
   }
 
+  // Call Game Hub's end_game function directly
+  async endGameOnGameHub(gameHubId: string, sessionId: number, player1Won: boolean): Promise<void> {
+    // Use the same pattern as the call method but for a different contract
+    const gameHubContract = new Contract(gameHubId);
+    const publicKey = await this.wallet.getPublicKey();
+    
+    // Get account for sequence number
+    const sourceAccount = await this.rpc.getAccount(publicKey);
+    
+    // Convert parameters to ScVal (using same pattern as call method)
+    const sessionIdScVal = typeof sessionId === 'number' ? xdr.ScVal.scvU32(sessionId) : nativeToScVal(sessionId);
+    const player1WonScVal = typeof player1Won === 'boolean' ? xdr.ScVal.scvBool(player1Won) : nativeToScVal(player1Won);
+    
+    // Build transaction
+    const transaction = new TransactionBuilder(sourceAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: this.network,
+    })
+      .addOperation(gameHubContract.call('end_game', sessionIdScVal, player1WonScVal))
+      .setTimeout(30)
+      .build();
+    
+    // Simulate first
+    const simResponse = await this.rpc.simulateTransaction(transaction);
+    if ('error' in simResponse) {
+      throw new Error(`Simulation failed: ${JSON.stringify(simResponse.error)}`);
+    }
+    
+    // Prepare transaction
+    const prepared = await this.rpc.prepareTransaction(transaction);
+    const xdrString = prepared.toXDR();
+    
+    // Sign transaction
+    const signed = await this.wallet.signTransaction(xdrString, this.network);
+    const restoredTx = TransactionBuilder.fromXDR(signed, this.network);
+    
+    // Send transaction
+    const sendResponse = await this.rpc.sendTransaction(restoredTx);
+    console.log(`[ContractClient] end_game transaction sent: ${sendResponse.hash}`);
+    
+    // Wait for transaction to be included (same pattern as call method)
+    let attempts = 0;
+    const maxAttempts = 30;
+    const currentLedger = await this.rpc.getLatestLedger();
+    let lastLedger = currentLedger.sequence;
+    
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const newLedger = await this.rpc.getLatestLedger();
+      if (newLedger.sequence > lastLedger) {
+        attempts++;
+        lastLedger = newLedger.sequence;
+        console.log(`[ContractClient] Ledger advanced from ${lastLedger - 1} to ${lastLedger} (attempt ${attempts})`);
+      }
+      
+      try {
+        const tx = await this.rpc.getTransaction(sendResponse.hash);
+        if (tx.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+          console.log(`[ContractClient] ✅ end_game transaction completed`);
+          return;
+        }
+        if (tx.status === rpc.Api.GetTransactionStatus.FAILED) {
+          throw new Error(`Transaction failed: ${tx.resultXdr}`);
+        }
+      } catch (error: any) {
+        if (error.message?.includes('not found') || error.message?.includes('not in ledger')) {
+          // Transaction not in ledger yet, continue waiting
+          continue;
+        }
+        throw error;
+      }
+    }
+    
+    throw new Error('Transaction not included in ledger after 30 attempts');
+  }
+
   private async call(functionName: string, ...args: any[]): Promise<any> {
     console.log(`[ContractClient.call] Calling ${functionName} with ${args.length} args`);
     const publicKey = await this.wallet.getPublicKey();

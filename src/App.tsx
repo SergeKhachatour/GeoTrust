@@ -3894,33 +3894,68 @@ const App: React.FC = () => {
                     </div>
                     {(() => {
                       const session = activeSessions.find(s => s.sessionId === userCurrentSession);
-                      if (session?.state === 'Active' && contractClient) {
-                        return (
-                          <button 
-                            className="primary-button" 
-                            onClick={async () => {
-                              if (!contractClient) return;
-                              try {
+                      if (!session || !contractClient) return null;
+                      
+                      // Check if user is player1 or player2 in this session
+                      const isPlayer1 = session.player1 === walletAddress;
+                      const isPlayer2 = session.player2 === walletAddress;
+                      const isMySession = isPlayer1 || isPlayer2;
+                      
+                      if (!isMySession) return null;
+                      
+                      // End Session button - works for both Waiting and Active sessions
+                      return (
+                        <button 
+                          className="primary-button" 
+                          onClick={async () => {
+                            if (!contractClient || !walletAddress) return;
+                            
+                            if (!window.confirm(`Are you sure you want to end session #${userCurrentSession}? This will call end_game on the Game Hub.`)) {
+                              return;
+                            }
+                            
+                            try {
+                              if (session.state === 'Active') {
+                                // For Active sessions, use resolveMatch (which calls end_game)
                                 const result = await contractClient.resolveMatch(userCurrentSession);
-                                alert(`Match resolved! ${result.matched ? 'Matched!' : 'No match.'} Winner: ${result.winner ? `${result.winner.slice(0, 6)}...${result.winner.slice(-4)}` : 'None'}`);
-                                // Refresh sessions after resolution
-                                setTimeout(() => {
-                                  if (readOnlyClient) {
-                                    fetchActiveSessions();
-                                  }
-                                }, 2000);
-                              } catch (error: any) {
-                                console.error('Failed to resolve match:', error);
-                                alert(`Failed to resolve match: ${error.message || error}`);
+                                alert(`Session ended! ${result.matched ? 'Matched!' : 'No match.'} Winner: ${result.winner ? `${result.winner.slice(0, 6)}...${result.winner.slice(-4)}` : 'None'}`);
+                              } else if (session.state === 'Waiting') {
+                                // For Waiting sessions, call Game Hub's end_game directly
+                                const gameHubId = process.env.REACT_APP_GAME_HUB_ID;
+                                if (!gameHubId) {
+                                  alert('Game Hub ID not configured. Cannot end waiting session.');
+                                  return;
+                                }
+                                
+                                // Call end_game on Game Hub: end_game(session_id: u32, player1_won: bool)
+                                // For waiting sessions, we'll set player1_won based on who is ending it
+                                const player1Won = isPlayer1; // If player1 ends it, player1 wins; if player2 ends it, player1 loses
+                                await contractClient.endGameOnGameHub(gameHubId, userCurrentSession, player1Won);
+                                alert(`Session #${userCurrentSession} ended successfully!`);
+                              } else {
+                                alert(`Cannot end session in ${session.state} state.`);
+                                return;
                               }
-                            }}
-                            style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#000', color: '#FFD700', width: '100%', marginBottom: '8px' }}
-                          >
-                            Resolve Match
-                          </button>
-                        );
-                      }
-                      return null;
+                              
+                              // Clear current session
+                              setUserCurrentSession(null);
+                              
+                              // Refresh sessions after ending
+                              setTimeout(() => {
+                                if (readOnlyClient) {
+                                  fetchActiveSessions();
+                                }
+                              }, 2000);
+                            } catch (error: any) {
+                              console.error('Failed to end session:', error);
+                              alert(`Failed to end session: ${error.message || error}`);
+                            }
+                          }}
+                          style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#dc3545', color: '#fff', width: '100%', marginBottom: '8px' }}
+                        >
+                          {session.state === 'Active' ? 'End Session (Resolve Match)' : 'End Session'}
+                        </button>
+                      );
                     })()}
                     <button 
                       className="primary-button" 
@@ -4228,6 +4263,12 @@ const App: React.FC = () => {
                     <button
                       className="primary-button"
                       onClick={async () => {
+                        // Check if already in this session
+                        if (userCurrentSession === selectedMarker.sessionId) {
+                          alert('You are already in this session!');
+                          return;
+                        }
+                        
                         if (userCurrentSession !== null) {
                           if (!window.confirm(`You are currently in session #${userCurrentSession}. Switch to session #${selectedMarker.sessionId}?`)) {
                             return;
