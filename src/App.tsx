@@ -1013,6 +1013,13 @@ const App: React.FC = () => {
 
   // Ref to store connectWallet function so it can be accessed in updateSessionMarkers
   const connectWalletRef = useRef<(() => Promise<void>) | null>(null);
+  // Ref to store current walletAddress so event listeners always have the latest value
+  const walletAddressRef = useRef<string | null>(null);
+
+  // Update walletAddressRef whenever walletAddress changes
+  useEffect(() => {
+    walletAddressRef.current = walletAddress;
+  }, [walletAddress]);
 
   // Convert cellId back to approximate coordinates (center of cell)
   const cellIdToCoordinates = (cellId: number, addRandomization: boolean = false): [number, number] => {
@@ -1063,23 +1070,25 @@ const App: React.FC = () => {
         el.className = 'marker marker-opponent session-user-marker';
         const publicKeyShort = `${session.player1.slice(0, 4)}...${session.player1.slice(-4)}`;
         el.innerHTML = `<div class="marker-label">👤<div class="marker-public-key">${publicKeyShort}</div></div>`;
-        // Match contract marker CSS to prevent movement on zoom
+        // Match other marker CSS (NFT, contract, other-user markers)
         el.style.cssText = `
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          position: relative;
+          position: absolute;
           width: 24px;
           height: 24px;
           transform: translate(-50%, -50%);
+          pointer-events: auto;
         `;
         el.title = `${session.player1} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           
+          // Check current walletAddress from ref (always has latest value)
           // When not logged in, prompt to connect wallet instead of showing profile
-          if (!walletAddress) {
+          if (!walletAddressRef.current) {
             if (window.confirm('Connect your wallet to view player details and join sessions!')) {
               // Trigger wallet connection
               if (connectWalletRef.current) {
@@ -1124,23 +1133,25 @@ const App: React.FC = () => {
         el.className = 'marker marker-opponent session-user-marker';
         const publicKeyShort = `${session.player2.slice(0, 4)}...${session.player2.slice(-4)}`;
         el.innerHTML = `<div class="marker-label">👤<div class="marker-public-key">${publicKeyShort}</div></div>`;
-        // Match contract marker CSS to prevent movement on zoom
+        // Match other marker CSS (NFT, contract, other-user markers)
         el.style.cssText = `
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          position: relative;
+          position: absolute;
           width: 24px;
           height: 24px;
           transform: translate(-50%, -50%);
+          pointer-events: auto;
         `;
         el.title = `${session.player2} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           
+          // Check current walletAddress from ref (always has latest value)
           // When not logged in, prompt to connect wallet instead of showing profile
-          if (!walletAddress) {
+          if (!walletAddressRef.current) {
             if (window.confirm('Connect your wallet to view player details and join sessions!')) {
               // Trigger wallet connection
               if (connectWalletRef.current) {
