@@ -1079,9 +1079,9 @@ const App: React.FC = () => {
           if (!walletAddress) {
             if (window.confirm('Connect your wallet to view player details and join sessions!')) {
               // Trigger wallet connection
-              if (wallet && wallet.setModalVisible) {
-                wallet.setModalVisible(true);
-              }
+              connectWallet().catch((error) => {
+                console.error('[App] Failed to connect wallet:', error);
+              });
             }
             return;
           }
@@ -1138,9 +1138,9 @@ const App: React.FC = () => {
           if (!walletAddress) {
             if (window.confirm('Connect your wallet to view player details and join sessions!')) {
               // Trigger wallet connection
-              if (wallet && wallet.setModalVisible) {
-                wallet.setModalVisible(true);
-              }
+              connectWallet().catch((error) => {
+                console.error('[App] Failed to connect wallet:', error);
+              });
             }
             return;
           }
@@ -1170,7 +1170,7 @@ const App: React.FC = () => {
         }
       }
     });
-  }, [walletAddress, wallet]);
+  }, [walletAddress, connectWallet]);
   
   // Track if fetchActiveSessions is currently running to prevent concurrent executions
   const isFetchingSessionsRef = useRef(false);
@@ -4212,12 +4212,14 @@ const App: React.FC = () => {
                             return;
                           }
                         }
-                        try {
-                          await handleJoinSession(selectedMarker.sessionId);
-                          setSelectedMarker(null); // Close overlay after joining
-                        } catch (error: any) {
-                          console.error('[App] Failed to join session from marker:', error);
-                          alert(`Failed to join session: ${error.message || 'Unknown error'}`);
+                        if (selectedMarker.sessionId) {
+                          try {
+                            await handleJoinSession(selectedMarker.sessionId);
+                            setSelectedMarker(null); // Close overlay after joining
+                          } catch (error: any) {
+                            console.error('[App] Failed to join session from marker:', error);
+                            alert(`Failed to join session: ${error.message || 'Unknown error'}`);
+                          }
                         }
                       }}
                       style={{ width: '100%', marginTop: '8px' }}
