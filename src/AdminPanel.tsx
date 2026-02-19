@@ -49,12 +49,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Check if current user is main admin
   const isMainAdmin: boolean = !!(walletAddress && mainAdminAddress && walletAddress === mainAdminAddress);
   
-  // Check if user is country admin for a specific country
-  const isCountryAdminFor = (countryCode: number): boolean => {
-    const admin = countryAdmins.get(countryCode);
-    return admin === walletAddress;
-  };
-  
   // Handle opening country management overlay
   const handleManageCountry = async (country: { code: number; name: string }) => {
     // Load country admin if not already loaded

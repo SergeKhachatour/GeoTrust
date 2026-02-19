@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ContractClient } from './contract';
 import { ReadOnlyContractClient } from './contract-readonly';
 
@@ -29,8 +29,7 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
   const [isLoadingPolicy, setIsLoadingPolicy] = useState(false);
   const [isMainAdmin, setIsMainAdmin] = useState(false);
   const [isCountryAdmin, setIsCountryAdmin] = useState(false);
-  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
-  const readOnlyClient = new ReadOnlyContractClient();
+  const readOnlyClient = useMemo(() => new ReadOnlyContractClient(), []);
 
   // Check admin status
   useEffect(() => {
@@ -38,11 +37,8 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
       if (!contractClient || !walletAddress) {
         setIsMainAdmin(false);
         setIsCountryAdmin(false);
-        setIsCheckingAdmin(false);
         return;
       }
-
-      setIsCheckingAdmin(true);
       try {
         // Check if main admin
         const isMain = !!(mainAdminAddress && walletAddress === mainAdminAddress);
@@ -71,7 +67,6 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
           setIsCountryAdmin(false); // Main admin doesn't need country admin flag
         }
       } finally {
-        setIsCheckingAdmin(false);
         setIsLoadingAdmin(false);
       }
     };
@@ -79,6 +74,7 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
     if (isOpen) {
       checkAdminStatus();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, countryCode, contractClient, walletAddress, mainAdminAddress]);
 
   // Load country policy
@@ -104,6 +100,7 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
     if (isOpen) {
       loadCountryPolicy();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, countryCode, contractClient]);
 
   if (!isOpen) return null;

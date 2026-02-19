@@ -178,6 +178,7 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
         setCountryMap(null);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, countryCode]);
 
   // Initialize map for country editing
@@ -364,6 +365,7 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
         }
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapContainer, isOpen, originalGeoJson]);
 
   // Check permissions
@@ -495,7 +497,7 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
       }
 
       // Successfully saved via API
-      const responseData = await saveResponse.json();
+      await saveResponse.json(); // Read response but don't need to store it
       setOriginalGeoJson(JSON.parse(JSON.stringify(currentGeoJson)));
       setHasChanges(false);
       alert('Country borders saved successfully!');
