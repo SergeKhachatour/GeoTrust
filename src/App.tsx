@@ -1011,6 +1011,24 @@ const App: React.FC = () => {
     }
   }, [allowedCountries, defaultAllowAll, updateCountryOverlay]);
 
+  // Convert cellId back to approximate coordinates (center of cell)
+  const cellIdToCoordinates = (cellId: number, addRandomization: boolean = false): [number, number] => {
+    const cellX = cellId % 360;
+    const cellY = Math.floor(cellId / 360);
+    // Center of the cell (1 degree grid)
+    let lng = cellX * 1.0 - 180 + 0.5;
+    let lat = cellY * 1.0 - 90 + 0.5;
+    
+    // Add randomization within the cell for privacy when not logged in
+    if (addRandomization) {
+      // Random offset within ±0.4 degrees (stays within cell boundaries)
+      lng += (Math.random() - 0.5) * 0.8;
+      lat += (Math.random() - 0.5) * 0.8;
+    }
+    
+    return [lng, lat];
+  };
+
   // Show markers from active sessions to entice users
   const updateSessionMarkers = useCallback((sessions: Array<{ 
     sessionId: number; 
@@ -1029,14 +1047,14 @@ const App: React.FC = () => {
     
     console.log('[App] updateSessionMarkers: Processing', sessions.length, 'sessions');
     
+    // When not logged in, use randomized positions to protect privacy
+    const useRandomizedPositions = !walletAddress;
+    
     // Add markers for players in active sessions
-    // For demo purposes, we'll place markers at approximate locations based on cell_id
-    // In production, you'd store actual lat/lon or fetch from a location service
     sessions.forEach(session => {
       if (session.player1 && session.p1CellId) {
-        // Convert cell_id to approximate lat/lon (simplified - in production use actual location)
-        const lat = (session.p1CellId % 360) * 0.5 - 90;
-        const lng = Math.floor(session.p1CellId / 360) * 0.5 - 180;
+        // Convert cell_id to approximate lat/lon
+        const [lng, lat] = cellIdToCoordinates(session.p1CellId, useRandomizedPositions);
         
         const el = document.createElement('div');
         el.className = 'marker marker-opponent session-user-marker';
@@ -1056,6 +1074,18 @@ const App: React.FC = () => {
         el.title = `${session.player1} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
+          
+          // When not logged in, prompt to connect wallet instead of showing profile
+          if (!walletAddress) {
+            if (window.confirm('Connect your wallet to view player details and join sessions!')) {
+              // Trigger wallet connection
+              if (wallet && wallet.setModalVisible) {
+                wallet.setModalVisible(true);
+              }
+            }
+            return;
+          }
+          
           setSelectedMarker({
             type: 'opponent',
             location: [lng, lat],
@@ -1082,8 +1112,8 @@ const App: React.FC = () => {
       }
       
       if (session.player2 && session.p2CellId) {
-        const lat = (session.p2CellId % 360) * 0.5 - 90;
-        const lng = Math.floor(session.p2CellId / 360) * 0.5 - 180;
+        // Convert cell_id to approximate lat/lon
+        const [lng, lat] = cellIdToCoordinates(session.p2CellId, useRandomizedPositions);
         
         const el = document.createElement('div');
         el.className = 'marker marker-opponent session-user-marker';
@@ -1103,6 +1133,18 @@ const App: React.FC = () => {
         el.title = `${session.player2} - Session #${session.sessionId}`;
         el.addEventListener('click', (e) => {
           e.stopPropagation();
+          
+          // When not logged in, prompt to connect wallet instead of showing profile
+          if (!walletAddress) {
+            if (window.confirm('Connect your wallet to view player details and join sessions!')) {
+              // Trigger wallet connection
+              if (wallet && wallet.setModalVisible) {
+                wallet.setModalVisible(true);
+              }
+            }
+            return;
+          }
+          
           setSelectedMarker({
             type: 'opponent',
             location: [lng, lat],
@@ -1128,7 +1170,7 @@ const App: React.FC = () => {
         }
       }
     });
-  }, []);
+  }, [walletAddress, wallet]);
   
   // Track if fetchActiveSessions is currently running to prevent concurrent executions
   const isFetchingSessionsRef = useRef(false);
@@ -4091,6 +4133,18 @@ const App: React.FC = () => {
                 <label>Location:</label>
                 <span>
                   {(() => {
+                    // When not logged in, show approximate location only
+                    if (!walletAddress && selectedMarker.type === 'opponent') {
+                      const lat = typeof selectedMarker.location[1] === 'number' 
+                        ? selectedMarker.location[1] 
+                        : Number(selectedMarker.location[1]) || 0;
+                      const lng = typeof selectedMarker.location[0] === 'number' 
+                        ? selectedMarker.location[0] 
+                        : Number(selectedMarker.location[0]) || 0;
+                      // Round to 1 decimal place for approximate location
+                      return `${lat.toFixed(1)}, ${lng.toFixed(1)} (approximate)`;
+                    }
+                    // When logged in, show exact coordinates
                     const lat = typeof selectedMarker.location[1] === 'number' 
                       ? selectedMarker.location[1] 
                       : Number(selectedMarker.location[1]) || 0;
@@ -4142,6 +4196,36 @@ const App: React.FC = () => {
                   myPublicKey={walletAddress}
                   theirPublicKey={selectedMarker.publicKey}
                 />
+              )}
+              {selectedMarker.sessionId && selectedMarker.type === 'opponent' && walletAddress && contractClient && (
+                <div className="marker-popup-field" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+                  {userCurrentSession === selectedMarker.sessionId ? (
+                    <div style={{ padding: '8px', backgroundColor: '#e8f5e9', borderRadius: '4px', textAlign: 'center' }}>
+                      <span style={{ color: '#2e7d32', fontWeight: 600 }}>✓ You are in this session</span>
+                    </div>
+                  ) : (
+                    <button
+                      className="primary-button"
+                      onClick={async () => {
+                        if (userCurrentSession !== null) {
+                          if (!window.confirm(`You are currently in session #${userCurrentSession}. Switch to session #${selectedMarker.sessionId}?`)) {
+                            return;
+                          }
+                        }
+                        try {
+                          await handleJoinSession(selectedMarker.sessionId);
+                          setSelectedMarker(null); // Close overlay after joining
+                        } catch (error: any) {
+                          console.error('[App] Failed to join session from marker:', error);
+                          alert(`Failed to join session: ${error.message || 'Unknown error'}`);
+                        }
+                      }}
+                      style={{ width: '100%', marginTop: '8px' }}
+                    >
+                      {userCurrentSession !== null ? `Switch to Session #${selectedMarker.sessionId}` : `Join Session #${selectedMarker.sessionId}`}
+                    </button>
+                  )}
+                </div>
               )}
               {selectedMarker.publicKey && (
                 <div className="marker-popup-field" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
