@@ -21,7 +21,17 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      connectSrc: ["'self'", "https://api.mapbox.com", "https://*.mapbox.com", "https://horizon-testnet.stellar.org", "https://horizon.stellar.org", "https://soroban-testnet.stellar.org"],
+      connectSrc: [
+        "'self'", 
+        "https://api.mapbox.com", 
+        "https://*.mapbox.com", 
+        "https://horizon-testnet.stellar.org", 
+        "https://horizon.stellar.org", 
+        "https://soroban-testnet.stellar.org",
+        "https://testnet.stellargeolink.com",
+        "https://stellargeolink.com",
+        "https://*.stellargeolink.com"
+      ],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://api.mapbox.com"],
       workerSrc: ["'self'", "blob:"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://api.mapbox.com"],
