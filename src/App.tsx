@@ -4422,6 +4422,27 @@ const App: React.FC = () => {
         />
       )}
       
+      {/* Session Details Overlay */}
+      {showSessionDetailsOverlay && userCurrentSession && (
+        <SessionDetailsOverlay
+          isOpen={showSessionDetailsOverlay}
+          onClose={() => setShowSessionDetailsOverlay(false)}
+          currentSession={activeSessions.find(s => s.sessionId === userCurrentSession) || null}
+          allSessions={activeSessions}
+          walletAddress={walletAddress}
+          onJoinSession={async (sessionId: number) => {
+            await handleJoinSession(sessionId);
+            setNotificationState({
+              isOpen: true,
+              title: 'Success',
+              message: `Successfully joined session #${sessionId}!`,
+              type: 'success',
+              autoClose: 3000,
+            });
+          }}
+        />
+      )}
+      
       {/* Country Management Overlay */}
       {showCountryManagementOverlay && selectedCountry && contractClient && (
         <CountryManagementOverlay
