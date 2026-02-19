@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { ContractClient } from './contract';
+import { ReadOnlyContractClient } from './contract-readonly';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
+import { CountryManagementOverlay } from './CountryManagementOverlay';
 
 interface AdminPanelProps {
   contractClient: ContractClient;
@@ -14,6 +16,7 @@ interface AdminPanelProps {
   onAdminChanged?: () => void;
   walletAddress?: string | null; // Current wallet address to check if user is main admin
   mainAdminAddress?: string | null; // Main admin address from contract
+  onManageCountry?: (country: { code: number; name: string }) => void; // Callback to open country management overlay
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -27,6 +30,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onAdminChanged,
   walletAddress,
   mainAdminAddress,
+  onManageCountry,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -39,16 +43,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showCountryAdminOverlay, setShowCountryAdminOverlay] = useState(false);
   const [newCountryAdminAddress, setNewCountryAdminAddress] = useState('');
   const [isSettingCountryAdmin, setIsSettingCountryAdmin] = useState(false);
+  const [showCountryManagement, setShowCountryManagement] = useState(false);
+  const [selectedCountryForManagement, setSelectedCountryForManagement] = useState<{ code: number; name: string } | null>(null);
   
   // Check if current user is main admin
-  const isMainAdmin = walletAddress && mainAdminAddress && walletAddress === mainAdminAddress;
+  const isMainAdmin: boolean = !!(walletAddress && mainAdminAddress && walletAddress === mainAdminAddress);
+  
+  // Check if user is country admin for a specific country
+  const isCountryAdminFor = (countryCode: number): boolean => {
+    const admin = countryAdmins.get(countryCode);
+    return admin === walletAddress;
+  };
+  
+  // Handle opening country management overlay
+  const handleManageCountry = async (country: { code: number; name: string }) => {
+    // Load country admin if not already loaded
+    if (!countryAdmins.has(country.code)) {
+      await loadCountryAdmin(country.code);
+    }
+    // Use callback if provided, otherwise use local state (for backward compatibility)
+    if (onManageCountry) {
+      onManageCountry(country);
+    } else {
+      setSelectedCountryForManagement(country);
+      setShowCountryManagement(true);
+    }
+  };
 
   // Load country admin for a specific country (on-demand)
   const loadCountryAdmin = async (countryCode: number) => {
-    if (!contractClient || !isMainAdmin) return;
+    if (!isMainAdmin) return;
     
     try {
-      const admin = await contractClient.getCountryAdmin(countryCode);
+      // Use read-only client to avoid Freighter prompts
+      const readOnlyClient = new ReadOnlyContractClient();
+      const admin = await readOnlyClient.getCountryAdmin(countryCode);
       if (admin) {
         const newAdmins = new Map(countryAdmins);
         newAdmins.set(countryCode, admin);
@@ -244,49 +273,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return countryAdmins.get(countryCode) || null;
   };
 
-  useEffect(() => {
-    if (!map) return;
-
-    const handleCountryClick = (e: mapboxgl.MapMouseEvent) => {
-      // Get country code from clicked feature
-      const features = map.queryRenderedFeatures(e.point, {
-        layers: ['countries-fill'],
-      });
-
-      if (features.length > 0) {
-        let countryCode = features[0].properties?.ISO_NUMERIC;
-        if (!countryCode) {
-          // Check feature-level id (ISO3) and properties
-          const iso3 = features[0].id;
-          const iso2 = features[0].properties?.ISO2;
-          
-          if (iso2) {
-            countryCode = iso2ToNumeric(iso2);
-          } else if (iso3) {
-            // Convert ISO3 to ISO2 first, then to numeric
-            // Ensure iso3 is a string
-            const iso3Str = typeof iso3 === 'string' ? iso3 : String(iso3);
-            const iso2FromIso3 = iso3ToIso2(iso3Str);
-            if (iso2FromIso3) {
-              countryCode = iso2ToNumeric(iso2FromIso3);
-            }
-          }
-        }
-        if (countryCode) {
-          handleToggleCountry(countryCode);
-        }
-      }
-    };
-
-    map.on('click', 'countries-fill', handleCountryClick);
-    map.getCanvas().style.cursor = 'pointer';
-
-    return () => {
-      map.off('click', 'countries-fill', handleCountryClick);
-      map.getCanvas().style.cursor = '';
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, allowedCountries]);
+  // Country click handling is now done in App.tsx
+  // Removed local click handler to avoid conflicts
 
   return (
     <div className="admin-panel">
@@ -332,14 +320,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div key={country.code} className="country-item" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                 <span style={{ flex: 1 }}>{country.name}</span>
-                <button
-                  className={`country-toggle ${isAllowed ? 'allowed' : 'denied'}`}
-                  onClick={() => handleToggleCountry(country.code)}
-                  disabled={isLoading}
-                  style={{ marginLeft: '8px' }}
-                >
-                  {isAllowed ? 'Allowed' : 'Denied'}
-                </button>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <button
+                    className="primary-button"
+                    onClick={() => handleManageCountry(country)}
+                    disabled={isLoading}
+                    style={{
+                      fontSize: '11px',
+                      padding: '4px 8px',
+                      backgroundColor: '#2196f3',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                    }}
+                    title="Manage Country"
+                  >
+                    Manage
+                  </button>
+                  <button
+                    className={`country-toggle ${isAllowed ? 'allowed' : 'denied'}`}
+                    onClick={() => handleToggleCountry(country.code)}
+                    disabled={isLoading}
+                    style={{ marginLeft: '4px' }}
+                  >
+                    {isAllowed ? 'Allowed' : 'Denied'}
+                  </button>
+                </div>
               </div>
               {isMainAdmin && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#666', marginTop: '2px', padding: '2px 0' }}>
@@ -567,6 +574,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Country Management Overlay - Only render if callback not provided (backward compatibility) */}
+      {!onManageCountry && showCountryManagement && selectedCountryForManagement && (
+        <CountryManagementOverlay
+          isOpen={showCountryManagement}
+          onClose={() => {
+            setShowCountryManagement(false);
+            setSelectedCountryForManagement(null);
+          }}
+          countryCode={selectedCountryForManagement.code}
+          countryName={selectedCountryForManagement.name}
+          contractClient={contractClient}
+          walletAddress={walletAddress || null}
+          mainAdminAddress={mainAdminAddress || null}
+          isMainAdmin={isMainAdmin}
+          map={map}
+        />
       )}
     </div>
   );

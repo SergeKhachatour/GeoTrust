@@ -4,14 +4,11 @@ const path = require('path');
 const serverScript = `#!/usr/bin/env node
 
 const http = require('http');
-const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { URL } = require('url');
 
 const PORT = process.env.PORT || 8080;
 const PUBLIC_DIR = __dirname;
-const SOROBAN_RPC_URL = 'https://soroban-testnet.stellar.org';
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -49,41 +46,6 @@ function serveFile(filePath, res) {
   });
 }
 
-// Proxy function for Soroban RPC requests
-function proxySorobanRPC(req, res) {
-  const url = new URL(SOROBAN_RPC_URL);
-  const options = {
-    hostname: url.hostname,
-    port: url.port || 443,
-    path: url.pathname,
-    method: req.method,
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'GeoTrust-Soroban-Proxy/1.0',
-    },
-  };
-
-  const proxyReq = https.request(options, (proxyRes) => {
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Content-Type', 'application/json');
-    
-    res.writeHead(proxyRes.statusCode, res.getHeaders());
-    proxyRes.pipe(res);
-  });
-
-  proxyReq.on('error', (err) => {
-    console.error('Proxy error:', err);
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Proxy request failed', message: err.message }));
-  });
-
-  // Forward request body
-  req.pipe(proxyReq);
-}
-
 const server = http.createServer((req, res) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -95,11 +57,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Proxy Soroban RPC requests
-  if (req.url === '/api/soroban-rpc' || req.url.startsWith('/api/soroban-rpc')) {
-    proxySorobanRPC(req, res);
-    return;
-  }
+  // Note: API endpoints are now handled by the separate backend server
+  // This server only serves static files for production builds
 
   // Serve static files
   let filePath = path.join(PUBLIC_DIR, req.url === '/' ? 'index.html' : req.url);
@@ -133,8 +92,8 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(\`Server running at http://localhost:\${PORT}/\`);
-  console.log(\`Soroban RPC proxy available at http://localhost:\${PORT}/api/soroban-rpc\`);
+  console.log(\`Static file server running at http://localhost:\${PORT}/\`);
+  console.log(\`Note: API endpoints are handled by the separate backend server\`);
 });
 `;
 

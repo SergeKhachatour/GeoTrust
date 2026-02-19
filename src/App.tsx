@@ -8,6 +8,8 @@ import { ReadOnlyContractClient } from './contract-readonly';
 import { AdminPanel } from './AdminPanel';
 import { GamePanel } from './GamePanel';
 import { CollapsiblePanel } from './CollapsiblePanel';
+import { CountryManagementOverlay } from './CountryManagementOverlay';
+import { CountryProfileOverlay } from './CountryProfileOverlay';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 import { Horizon } from '@stellar/stellar-sdk';
 import { geolinkApi, NearbyNFT, NearbyContract } from './services/geolinkApi';
@@ -261,6 +263,12 @@ const App: React.FC = () => {
   const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
   const [otherSessionsMinimized, setOtherSessionsMinimized] = useState(false);
   const [adminPanelMinimized, setAdminPanelMinimized] = useState(false);
+  
+  // Country overlay state
+  const [showCountryManagementOverlay, setShowCountryManagementOverlay] = useState(false);
+  const [showCountryProfileOverlay, setShowCountryProfileOverlay] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<{ code: number; name: string } | null>(null);
+  const [countryNameCache, setCountryNameCache] = useState<Map<number, string>>(new Map());
   
   // Refs for NFT and contract markers (matching xyz-wallet pattern)
   const nftMarkersRef = useRef<mapboxgl.Marker[]>([]);
@@ -809,9 +817,115 @@ const App: React.FC = () => {
         showUserHeading: true
       });
       map.current.addControl(geolocateControl, 'bottom-right');
+      
+      // Add country click handler
+      const handleCountryClick = async (e: mapboxgl.MapMouseEvent) => {
+        const features = map.current!.queryRenderedFeatures(e.point, {
+          layers: ['countries-fill'],
+        });
+
+        if (features.length > 0) {
+          let countryCode = features[0].properties?.ISO_NUMERIC;
+          if (!countryCode) {
+            const iso3 = features[0].id;
+            const iso2 = features[0].properties?.ISO2;
+            
+            if (iso2) {
+              countryCode = iso2ToNumeric(iso2);
+            } else if (iso3) {
+              const iso3Str = typeof iso3 === 'string' ? iso3 : String(iso3);
+              const iso2FromIso3 = iso3ToIso2(iso3Str);
+              if (iso2FromIso3) {
+                countryCode = iso2ToNumeric(iso2FromIso3);
+              }
+            }
+          }
+          
+          if (countryCode) {
+            const code = Number(countryCode);
+            
+            // Get country name from cache or GeoJSON
+            let countryName: string = countryNameCache.get(code) || '';
+            if (!countryName) {
+              const name = features[0].properties?.name || features[0].properties?.NAME;
+              if (name) {
+                countryName = String(name);
+                const newCache = new Map(countryNameCache);
+                newCache.set(code, countryName);
+                setCountryNameCache(newCache);
+              } else {
+                // Fallback: try to load from GeoJSON
+                try {
+                  const response = await fetch('/countries.geojson');
+                  if (response.ok) {
+                    const geojson = await response.json();
+                    const feature = geojson.features.find((f: any) => {
+                      const fCode = f.properties?.ISO_NUMERIC;
+                      return fCode && Number(fCode) === code;
+                    });
+                    if (feature) {
+                      countryName = feature.properties?.name || feature.properties?.NAME || `Country ${code}`;
+                      const newCache = new Map(countryNameCache);
+                      newCache.set(code, countryName);
+                      setCountryNameCache(newCache);
+                    } else {
+                      countryName = `Country ${code}`;
+                    }
+                  } else {
+                    countryName = `Country ${code}`;
+                  }
+                } catch (error) {
+                  console.error('[App] Failed to load country name:', error);
+                  countryName = `Country ${code}`;
+                }
+              }
+            }
+            
+            // Ensure countryName is not empty
+            if (!countryName) {
+              countryName = `Country ${code}`;
+            }
+            
+            // Check if user is admin (main admin or country admin)
+            const isMainAdmin = !!(walletAddress && mainAdminAddress && walletAddress === mainAdminAddress);
+            let isCountryAdmin = false;
+            
+            if (walletAddress && !isMainAdmin) {
+              try {
+                // Use read-only client to avoid Freighter prompts
+                const readOnlyClient = new ReadOnlyContractClient();
+                const admin = await readOnlyClient.getCountryAdmin(code);
+                isCountryAdmin = admin === walletAddress;
+              } catch (error) {
+                // Ignore errors - user is not country admin
+              }
+            }
+            
+            // Open appropriate overlay
+            if (isMainAdmin || isCountryAdmin) {
+              setSelectedCountry({ code, name: countryName });
+              setShowCountryManagementOverlay(true);
+            } else {
+              setSelectedCountry({ code, name: countryName });
+              setShowCountryProfileOverlay(true);
+            }
+          }
+        }
+      };
+
+      map.current.on('click', 'countries-fill', handleCountryClick);
+      map.current.getCanvas().style.cursor = 'pointer';
+      
+      return () => {
+        map.current?.off('click', 'countries-fill', handleCountryClick);
+        if (map.current) {
+          map.current.getCanvas().style.cursor = '';
+        }
+      };
     } catch (error) {
       console.error('[App] Failed to initialize map:', error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadCountryOverlay, mapStyle, pitch, bearing, updateCountryOverlay]);
 
   useEffect(() => {
@@ -1016,9 +1130,24 @@ const App: React.FC = () => {
     });
   }, []);
   
+  // Track if fetchActiveSessions is currently running to prevent concurrent executions
+  const isFetchingSessionsRef = useRef(false);
+  
   // Fetch active sessions (poll recent session IDs)
+  // Track known active session IDs to optimize polling
+  const knownActiveSessionIdsRef = useRef<Set<number>>(new Set());
+  const maxSessionIdSeenRef = useRef<number>(0);
+
   const fetchActiveSessions = useCallback(async () => {
     if (!readOnlyClient) return;
+    
+    // Prevent concurrent executions
+    if (isFetchingSessionsRef.current) {
+      console.log('[App] fetchActiveSessions already running, skipping...');
+      return;
+    }
+    
+    isFetchingSessionsRef.current = true;
 
     try {
       const sessions: Array<{ 
@@ -1033,32 +1162,81 @@ const App: React.FC = () => {
         createdLedger?: number;
       }> = [];
       
-      // Poll sessions 1-200 to find active ones
-      // In production, you'd want a better way to track sessions
-      for (let sessionId = 1; sessionId <= 200; sessionId++) {
-        try {
-          const session = await readOnlyClient.getSession(sessionId);
-          if (session && (session.state === 'Waiting' || session.state === 'Active')) {
-            sessions.push({
-              sessionId,
-              player1: session.player1 || null,
-              player2: session.player2 || null,
-              state: session.state || 'Unknown',
-              p1CellId: session.p1CellId || session.p1_cell_id,
-              p2CellId: session.p2CellId || session.p2_cell_id,
-              p1Country: session.p1Country || session.p1_country,
-              p2Country: session.p2Country || session.p2_country,
-              createdLedger: session.createdLedger || session.created_ledger,
-            });
-          }
-        } catch (error) {
-          // Session doesn't exist or error - skip it
-          continue;
+      // Smart session ID range: check known active sessions + a small range around max seen
+      const sessionIdsToCheck = new Set<number>();
+      
+      // Add all known active session IDs
+      knownActiveSessionIdsRef.current.forEach(id => sessionIdsToCheck.add(id));
+      
+      // Check a small range around the max session ID we've seen (for new sessions)
+      const checkRange = 20; // Check 20 sessions ahead of max seen
+      const startRange = Math.max(1, maxSessionIdSeenRef.current);
+      const endRange = Math.min(200, maxSessionIdSeenRef.current + checkRange);
+      for (let id = startRange; id <= endRange; id++) {
+        sessionIdsToCheck.add(id);
+      }
+      
+      // Also check a small range at the beginning (sessions 1-10) in case we missed early ones
+      for (let id = 1; id <= 10; id++) {
+        sessionIdsToCheck.add(id);
+      }
+      
+      const sessionIdsArray = Array.from(sessionIdsToCheck).sort((a, b) => a - b);
+      console.log(`[App] Checking ${sessionIdsArray.length} session IDs (known: ${knownActiveSessionIdsRef.current.size}, range: ${startRange}-${endRange})`);
+      
+      // Process in batches to avoid overwhelming the backend
+      const batchSize = 10;
+      for (let i = 0; i < sessionIdsArray.length; i += batchSize) {
+        // Process batch in parallel
+        const batchPromises = [];
+        for (let j = 0; j < batchSize && (i + j) < sessionIdsArray.length; j++) {
+          const checkId = sessionIdsArray[i + j];
+          batchPromises.push(
+            readOnlyClient.getSession(checkId)
+              .then(session => {
+                if (session && (session.state === 'Waiting' || session.state === 'Active')) {
+                  // Track this as an active session
+                  knownActiveSessionIdsRef.current.add(checkId);
+                  maxSessionIdSeenRef.current = Math.max(maxSessionIdSeenRef.current, checkId);
+                  
+                  return {
+                    sessionId: checkId,
+                    player1: session.player1 || null,
+                    player2: session.player2 || null,
+                    state: session.state || 'Unknown',
+                    p1CellId: session.p1CellId || session.p1_cell_id,
+                    p2CellId: session.p2CellId || session.p2_cell_id,
+                    p1Country: session.p1Country || session.p1_country,
+                    p2Country: session.p2Country || session.p2_country,
+                    createdLedger: session.createdLedger || session.created_ledger,
+                  };
+                } else {
+                  // Session is no longer active, remove from known set
+                  knownActiveSessionIdsRef.current.delete(checkId);
+                  return null;
+                }
+              })
+              .catch(() => {
+                // Session doesn't exist or error - remove from known set
+                knownActiveSessionIdsRef.current.delete(checkId);
+                return null;
+              })
+          );
+        }
+        
+        const batchResults = await Promise.all(batchPromises);
+        batchResults.forEach(result => {
+          if (result) sessions.push(result);
+        });
+        
+        // Small delay between batches to avoid overwhelming the backend
+        if (i + batchSize < sessionIdsArray.length) {
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
       }
       
       setActiveSessions(sessions);
-      console.log('[App] Active sessions:', sessions);
+      console.log(`[App] Active sessions: ${sessions.length} (checked ${sessionIdsArray.length} IDs)`);
       
       // Update markers on map from active sessions (even without wallet)
       if (map.current && map.current.loaded()) {
@@ -1066,6 +1244,8 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error('[App] Failed to fetch active sessions:', error);
+    } finally {
+      isFetchingSessionsRef.current = false;
     }
   }, [readOnlyClient, updateSessionMarkers]);
 
@@ -1201,10 +1381,10 @@ const App: React.FC = () => {
     if (readOnlyClient) {
       fetchActiveSessions();
       
-      // Poll for active sessions every 5 seconds for better real-time updates
+      // Poll every 60 seconds (reduced from 30 to minimize backend load)
       const sessionInterval = setInterval(() => {
         fetchActiveSessions();
-      }, 5000);
+      }, 60000);
       
       return () => clearInterval(sessionInterval);
     }
@@ -2447,7 +2627,9 @@ const App: React.FC = () => {
       let xdrError = false;
       
       try {
-        admin = await contractClient.getAdmin();
+        // Use read-only client to avoid Freighter prompts
+        const client = readOnlyClient || new ReadOnlyContractClient();
+        admin = await client.getAdmin();
       } catch (error: any) {
         // Check if this is an XDR parsing error
         if (error.message?.includes('XDR_PARSING_ERROR')) {
@@ -2585,7 +2767,9 @@ const App: React.FC = () => {
           
           // First check if Game Hub is already set
           try {
-            const currentGameHub = await contractClient.getGameHub();
+            // Use read-only client to avoid Freighter prompts
+            const client = readOnlyClient || new ReadOnlyContractClient();
+            const currentGameHub = await client.getGameHub();
             if (currentGameHub) {
               console.log('[App] ✅ Game Hub already set in contract:', currentGameHub);
               if (gameHubId && currentGameHub !== gameHubId) {
@@ -2606,7 +2790,9 @@ const App: React.FC = () => {
               
               // Verify it was set
               try {
-                const verifyGameHub = await contractClient.getGameHub();
+                // Use read-only client to avoid Freighter prompts
+                const client = readOnlyClient || new ReadOnlyContractClient();
+                const verifyGameHub = await client.getGameHub();
                 if (verifyGameHub === gameHubId) {
                   console.log('[App] ✅ Verified Game Hub is set correctly in contract');
                   console.log('[App] ✅ start_game and end_game will be called when sessions become Active and are resolved');
@@ -3733,6 +3919,10 @@ const App: React.FC = () => {
                     }}
                     walletAddress={walletAddress}
                     mainAdminAddress={mainAdminAddress}
+                    onManageCountry={(country) => {
+                      setSelectedCountry(country);
+                      setShowCountryManagementOverlay(true);
+                    }}
                   />
                 )}
               </>
@@ -3936,6 +4126,45 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Country Management Overlay */}
+      {showCountryManagementOverlay && selectedCountry && contractClient && (
+        <CountryManagementOverlay
+          isOpen={showCountryManagementOverlay}
+          onClose={() => {
+            setShowCountryManagementOverlay(false);
+            setSelectedCountry(null);
+          }}
+          countryCode={selectedCountry.code}
+          countryName={selectedCountry.name}
+          contractClient={contractClient}
+          walletAddress={walletAddress}
+          mainAdminAddress={mainAdminAddress}
+          isMainAdmin={!!(walletAddress && mainAdminAddress && walletAddress === mainAdminAddress)}
+          map={map.current}
+        />
+      )}
+      
+      {/* Country Profile Overlay (for non-admins) */}
+      {showCountryProfileOverlay && selectedCountry && contractClient && (
+        <CountryProfileOverlay
+          isOpen={showCountryProfileOverlay}
+          onClose={() => {
+            setShowCountryProfileOverlay(false);
+            setSelectedCountry(null);
+          }}
+          countryCode={selectedCountry.code}
+          countryName={selectedCountry.name}
+          contractClient={contractClient}
+          walletAddress={walletAddress}
+          mainAdminAddress={mainAdminAddress}
+          onManageCountry={(country) => {
+            setSelectedCountry(country);
+            setShowCountryProfileOverlay(false);
+            setShowCountryManagementOverlay(true);
+          }}
+        />
       )}
     </div>
   );

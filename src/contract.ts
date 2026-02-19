@@ -22,8 +22,13 @@ export class ContractClient {
     this.wallet = wallet;
     this.network = Networks.TESTNET;
     // Allow RPC URL to be configured via environment variable for CORS proxy support
-    // Default to direct endpoint, but can use proxy like: https://corsproxy.io/?https://soroban-testnet.stellar.org
-    const rpcUrl = process.env.REACT_APP_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
+    // In development, use backend proxy. In production, use configured URL or direct endpoint
+    // Check if we're running on localhost (development) to use proxy
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const rpcUrl = process.env.REACT_APP_SOROBAN_RPC_URL || 
+      (isDevelopment 
+        ? `${window.location.protocol}//${window.location.hostname}:8080/api/soroban-rpc`
+        : 'https://soroban-testnet.stellar.org');
     this.rpc = new rpc.Server(rpcUrl);
     console.log('[ContractClient] Using RPC URL:', rpcUrl);
     

@@ -22,8 +22,17 @@ export class ReadOnlyContractClient {
   constructor(contractId?: string) {
     this.network = Networks.TESTNET;
     // Allow RPC URL to be configured via environment variable for CORS proxy support
-    // Default to direct endpoint, but can use proxy like: https://corsproxy.io/?https://soroban-testnet.stellar.org
-    const rpcUrl = process.env.REACT_APP_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
+    // In development, use backend proxy. In production, use configured URL or direct endpoint
+    // Check if we're running on localhost (development) to use proxy
+    let rpcUrl = process.env.REACT_APP_SOROBAN_RPC_URL;
+    if (!rpcUrl && typeof window !== 'undefined') {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      rpcUrl = isDevelopment
+        ? `${window.location.protocol}//${window.location.hostname}:8080/api/soroban-rpc`
+        : 'https://soroban-testnet.stellar.org';
+    } else if (!rpcUrl) {
+      rpcUrl = 'https://soroban-testnet.stellar.org';
+    }
     this.rpc = new rpc.Server(rpcUrl);
     console.log('[ReadOnlyContractClient] Using RPC URL:', rpcUrl);
     
@@ -41,6 +50,51 @@ export class ReadOnlyContractClient {
 
   private async call(functionName: string, ...args: any[]): Promise<any> {
     try {
+      // Try to use backend API first (uses service account for read-only operations)
+      // Check if we're in development or if backend is available
+      const isDevelopment = typeof window !== 'undefined' && 
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      
+      if (isDevelopment || process.env.REACT_APP_USE_BACKEND_API === 'true') {
+        try {
+          // Convert args to parameters array for backend (plain values, backend will convert)
+          const parameters = args;
+
+          const backendUrl = isDevelopment 
+            ? `${window.location.protocol}//${window.location.hostname}:8080/api/contract/readonly`
+            : '/api/contract/readonly';
+
+          const response = await fetch(backendUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contractId: this.contractId,
+              functionName,
+              parameters,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.result) {
+              // Parse base64 XDR back to ScVal
+              const scVal = xdr.ScVal.fromXDR(data.result, 'base64');
+              // Convert ScVal to JavaScript
+              return this.scValToJs(scVal);
+            }
+            return null;
+          }
+          // If backend fails, fall through to direct RPC
+          console.warn('[ReadOnlyContractClient] Backend API failed, falling back to direct RPC');
+        } catch (backendError) {
+          // If backend is not available, fall through to direct RPC
+          console.warn('[ReadOnlyContractClient] Backend API not available, using direct RPC:', backendError);
+        }
+      }
+
+      // Fallback: Direct RPC simulation (original implementation)
       // Convert arguments to ScVal (same logic as ContractClient)
       const scValArgs = args.map(arg => {
         if (arg instanceof xdr.ScVal) {
@@ -256,6 +310,22 @@ export class ReadOnlyContractClient {
     return result as boolean;
   }
 
+  async getCountryAdmin(country: number): Promise<string | null> {
+    try {
+      const result = await this.call('get_country_admin', country);
+      if (!result || result === null || result === undefined) {
+        return null;
+      }
+      if (typeof result === 'string') {
+        return result;
+      }
+      return String(result);
+    } catch (error: any) {
+      console.error('[ReadOnlyContractClient] Failed to get country admin:', error);
+      return null;
+    }
+  }
+
   async getSession(sessionId: number): Promise<any> {
     return await this.call('get_session', sessionId);
   }
@@ -263,5 +333,37 @@ export class ReadOnlyContractClient {
   async listAllowedCountries(page: number = 0, pageSize: number = 100): Promise<number[]> {
     const result = await this.call('list_allowed_countries', page, pageSize);
     return result as number[];
+  }
+
+  async getAdmin(): Promise<string | null> {
+    try {
+      const result = await this.call('get_admin');
+      if (!result || result === null || result === undefined) {
+        return null;
+      }
+      if (typeof result === 'string') {
+        return result;
+      }
+      return String(result);
+    } catch (error: any) {
+      console.error('[ReadOnlyContractClient] Failed to get admin:', error);
+      return null;
+    }
+  }
+
+  async getGameHub(): Promise<string | null> {
+    try {
+      const result = await this.call('get_game_hub');
+      if (!result || result === null || result === undefined) {
+        return null;
+      }
+      if (typeof result === 'string') {
+        return result;
+      }
+      return String(result);
+    } catch (error: any) {
+      console.error('[ReadOnlyContractClient] Failed to get game hub:', error);
+      return null;
+    }
   }
 }
