@@ -23,13 +23,13 @@ Change the Azure startup command to use an absolute path:
    
    To:
    ```
-   cd /home/site/wwwroot && cd server && npm start
+   cd /home/site/wwwroot/server && npm install --production && npm start
    ```
    
-   Or simply:
-   ```
-   cd /home/site/wwwroot/server && npm start
-   ```
+   This will:
+   1. Navigate to the server directory
+   2. Install all production dependencies (including @stellar/stellar-sdk)
+   3. Start the server
 
 4. Click **Save**
 5. **Restart** the app

@@ -14,7 +14,7 @@ In Azure Portal → Your App Service → Configuration → General settings:
 
 **Startup Command:**
 ```
-cd /home/site/wwwroot/server && npm start
+cd /home/site/wwwroot/server && npm install --production && npm start
 ```
 
 **Important:** Use the absolute path `/home/site/wwwroot/server` to ensure npm finds the correct `package.json` file.
