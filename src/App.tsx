@@ -10,6 +10,7 @@ import { GamePanel } from './GamePanel';
 import { CollapsiblePanel } from './CollapsiblePanel';
 import { ConfirmationOverlay } from './ConfirmationOverlay';
 import { NotificationOverlay } from './NotificationOverlay';
+import { SessionDetailsOverlay } from './SessionDetailsOverlay';
 import { CountryManagementOverlay } from './CountryManagementOverlay';
 import { CountryProfileOverlay } from './CountryProfileOverlay';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';

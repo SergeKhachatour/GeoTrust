@@ -35,8 +35,6 @@ export const SessionDetailsOverlay: React.FC<SessionDetailsOverlayProps> = ({
   if (!isOpen) return null;
 
   const otherSessions = allSessions.filter(s => s.sessionId !== currentSession?.sessionId);
-  const isPlayerInCurrentSession = currentSession && walletAddress && 
-    (currentSession.player1 === walletAddress || currentSession.player2 === walletAddress);
 
   return (
     <div className="session-details-overlay" onClick={onClose}>
