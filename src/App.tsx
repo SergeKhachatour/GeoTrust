@@ -1170,6 +1170,7 @@ const App: React.FC = () => {
       
       // Check a small range around the max session ID we've seen (for new sessions)
       const checkRange = 20; // Check 20 sessions ahead of max seen
+      let rangeInfo: string;
       
       // If we haven't seen any sessions yet, check a wider initial range (1-100)
       // to discover existing sessions
@@ -1178,6 +1179,7 @@ const App: React.FC = () => {
         for (let id = 1; id <= 100; id++) {
           sessionIdsToCheck.add(id);
         }
+        rangeInfo = 'initial discovery (1-100)';
       } else {
         // Normal operation: check around max seen
         const startRange = Math.max(1, maxSessionIdSeenRef.current);
@@ -1190,10 +1192,11 @@ const App: React.FC = () => {
         for (let id = 1; id <= 10; id++) {
           sessionIdsToCheck.add(id);
         }
+        rangeInfo = `${startRange}-${endRange}`;
       }
       
       const sessionIdsArray = Array.from(sessionIdsToCheck).sort((a, b) => a - b);
-      console.log(`[App] Checking ${sessionIdsArray.length} session IDs (known: ${knownActiveSessionIdsRef.current.size}, range: ${startRange}-${endRange})`);
+      console.log(`[App] Checking ${sessionIdsArray.length} session IDs (known: ${knownActiveSessionIdsRef.current.size}, range: ${rangeInfo})`);
       
       // Process in batches to avoid overwhelming the backend
       const batchSize = 10;
