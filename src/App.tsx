@@ -4377,6 +4377,32 @@ const App: React.FC = () => {
         </div>
       )}
       
+      {/* Confirmation Overlay */}
+      {confirmationState && (
+        <ConfirmationOverlay
+          isOpen={confirmationState.isOpen}
+          title={confirmationState.title}
+          message={confirmationState.message}
+          confirmText={confirmationState.confirmText}
+          cancelText={confirmationState.cancelText}
+          type={confirmationState.type}
+          onConfirm={confirmationState.onConfirm}
+          onCancel={() => setConfirmationState(null)}
+        />
+      )}
+      
+      {/* Notification Overlay */}
+      {notificationState && (
+        <NotificationOverlay
+          isOpen={notificationState.isOpen}
+          title={notificationState.title}
+          message={notificationState.message}
+          type={notificationState.type}
+          autoClose={notificationState.autoClose}
+          onClose={() => setNotificationState(null)}
+        />
+      )}
+      
       {/* Country Management Overlay */}
       {showCountryManagementOverlay && selectedCountry && contractClient && (
         <CountryManagementOverlay
