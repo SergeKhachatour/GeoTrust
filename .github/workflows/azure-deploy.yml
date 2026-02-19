@@ -42,6 +42,20 @@ jobs:
         REACT_APP_GEOLINK_WALLET_PROVIDER_KEY: ${{ secrets.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY }}
         REACT_APP_GEOLINK_DATA_CONSUMER_KEY: ${{ secrets.REACT_APP_GEOLINK_DATA_CONSUMER_KEY }}
 
+    - name: Install server dependencies
+      run: cd server && npm ci
+
+    - name: Create deployment package
+      run: |
+        # Create a deployment directory with both build and server
+        mkdir -p deploy
+        cp -r build deploy/
+        cp -r server deploy/
+        cp package.json deploy/ 2>/dev/null || true
+        cp package-lock.json deploy/ 2>/dev/null || true
+        # Copy public directory if it exists (for countries.geojson)
+        cp -r public deploy/ 2>/dev/null || true
+
     - name: Wait for any ongoing deployments to complete
       run: |
         echo "Waiting 60 seconds to allow any ongoing deployments to complete..."
@@ -54,7 +68,7 @@ jobs:
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        package: ./build
+        package: ./deploy
       continue-on-error: true
       timeout-minutes: 10
 
@@ -71,5 +85,5 @@ jobs:
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        package: ./build
+        package: ./deploy
       timeout-minutes: 10
