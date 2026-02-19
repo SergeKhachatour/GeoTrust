@@ -8,6 +8,8 @@ import { ReadOnlyContractClient } from './contract-readonly';
 import { AdminPanel } from './AdminPanel';
 import { GamePanel } from './GamePanel';
 import { CollapsiblePanel } from './CollapsiblePanel';
+import { ConfirmationOverlay } from './ConfirmationOverlay';
+import { NotificationOverlay } from './NotificationOverlay';
 import { CountryManagementOverlay } from './CountryManagementOverlay';
 import { CountryProfileOverlay } from './CountryProfileOverlay';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
@@ -263,6 +265,25 @@ const App: React.FC = () => {
   const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
   const [otherSessionsMinimized, setOtherSessionsMinimized] = useState(false);
   const [adminPanelMinimized, setAdminPanelMinimized] = useState(false);
+  
+  // Confirmation and notification overlay states
+  const [confirmationState, setConfirmationState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: 'danger' | 'warning' | 'info';
+    onConfirm: () => void;
+  } | null>(null);
+  
+  const [notificationState, setNotificationState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type?: 'success' | 'error' | 'info' | 'warning';
+    autoClose?: number;
+  } | null>(null);
   
   // Country overlay state
   const [showCountryManagementOverlay, setShowCountryManagementOverlay] = useState(false);
@@ -3910,46 +3931,94 @@ const App: React.FC = () => {
                           onClick={async () => {
                             if (!contractClient || !walletAddress) return;
                             
-                            if (!window.confirm(`Are you sure you want to end session #${userCurrentSession}? This will call end_game on the Game Hub.`)) {
-                              return;
-                            }
-                            
-                            try {
-                              if (session.state === 'Active') {
-                                // For Active sessions, use resolveMatch (which calls end_game)
-                                const result = await contractClient.resolveMatch(userCurrentSession);
-                                alert(`Session ended! ${result.matched ? 'Matched!' : 'No match.'} Winner: ${result.winner ? `${result.winner.slice(0, 6)}...${result.winner.slice(-4)}` : 'None'}`);
-                              } else if (session.state === 'Waiting') {
-                                // For Waiting sessions, call Game Hub's end_game directly
-                                const gameHubId = process.env.REACT_APP_GAME_HUB_ID;
-                                if (!gameHubId) {
-                                  alert('Game Hub ID not configured. Cannot end waiting session.');
-                                  return;
-                                }
+                            // Show confirmation overlay
+                            setConfirmationState({
+                              isOpen: true,
+                              title: 'End Session',
+                              message: `Are you sure you want to end session #${userCurrentSession}? This will call end_game on the Game Hub and resolve the match.`,
+                              confirmText: 'End Session',
+                              cancelText: 'Cancel',
+                              type: 'danger',
+                              onConfirm: async () => {
+                                setConfirmationState(null);
                                 
-                                // Call end_game on Game Hub: end_game(session_id: u32, player1_won: bool)
-                                // For waiting sessions, we'll set player1_won based on who is ending it
-                                const player1Won = isPlayer1; // If player1 ends it, player1 wins; if player2 ends it, player1 loses
-                                await contractClient.endGameOnGameHub(gameHubId, userCurrentSession, player1Won);
-                                alert(`Session #${userCurrentSession} ended successfully!`);
-                              } else {
-                                alert(`Cannot end session in ${session.state} state.`);
-                                return;
-                              }
-                              
-                              // Clear current session
-                              setUserCurrentSession(null);
-                              
-                              // Refresh sessions after ending
-                              setTimeout(() => {
-                                if (readOnlyClient) {
-                                  fetchActiveSessions();
+                                try {
+                                  if (session.state === 'Active') {
+                                    // For Active sessions, use resolveMatch (which calls end_game)
+                                    // resolveMatch checks if players matched (same asset_tag and same/adjacent cell_id)
+                                    // and determines the winner, then calls Game Hub's end_game
+                                    const result = await contractClient.resolveMatch(userCurrentSession);
+                                    
+                                    const winnerText = result.winner 
+                                      ? `${result.winner.slice(0, 6)}...${result.winner.slice(-4)}`
+                                      : 'None';
+                                    const matchText = result.matched ? 'Players matched!' : 'No match.';
+                                    
+                                    setNotificationState({
+                                      isOpen: true,
+                                      title: 'Session Ended',
+                                      message: `${matchText} Winner: ${winnerText}`,
+                                      type: 'success',
+                                      autoClose: 5000,
+                                    });
+                                  } else if (session.state === 'Waiting') {
+                                    // For Waiting sessions, call Game Hub's end_game directly
+                                    const gameHubId = process.env.REACT_APP_GAME_HUB_ID;
+                                    if (!gameHubId) {
+                                      setNotificationState({
+                                        isOpen: true,
+                                        title: 'Error',
+                                        message: 'Game Hub ID not configured. Cannot end waiting session.',
+                                        type: 'error',
+                                        autoClose: 5000,
+                                      });
+                                      return;
+                                    }
+                                    
+                                    // Call end_game on Game Hub: end_game(session_id: u32, player1_won: bool)
+                                    // For waiting sessions, we'll set player1_won based on who is ending it
+                                    const player1Won = isPlayer1; // If player1 ends it, player1 wins; if player2 ends it, player1 loses
+                                    await contractClient.endGameOnGameHub(gameHubId, userCurrentSession, player1Won);
+                                    
+                                    setNotificationState({
+                                      isOpen: true,
+                                      title: 'Session Ended',
+                                      message: `Session #${userCurrentSession} ended successfully!`,
+                                      type: 'success',
+                                      autoClose: 5000,
+                                    });
+                                  } else {
+                                    setNotificationState({
+                                      isOpen: true,
+                                      title: 'Error',
+                                      message: `Cannot end session in ${session.state} state.`,
+                                      type: 'error',
+                                      autoClose: 5000,
+                                    });
+                                    return;
+                                  }
+                                  
+                                  // Clear current session
+                                  setUserCurrentSession(null);
+                                  
+                                  // Refresh sessions after ending
+                                  setTimeout(() => {
+                                    if (readOnlyClient) {
+                                      fetchActiveSessions();
+                                    }
+                                  }, 2000);
+                                } catch (error: any) {
+                                  console.error('Failed to end session:', error);
+                                  setNotificationState({
+                                    isOpen: true,
+                                    title: 'Error',
+                                    message: `Failed to end session: ${error.message || error}`,
+                                    type: 'error',
+                                    autoClose: 7000,
+                                  });
                                 }
-                              }, 2000);
-                            } catch (error: any) {
-                              console.error('Failed to end session:', error);
-                              alert(`Failed to end session: ${error.message || error}`);
-                            }
+                              },
+                            });
                           }}
                           style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#dc3545', color: '#fff', width: '100%', marginBottom: '8px' }}
                         >
