@@ -4047,8 +4047,7 @@ const App: React.FC = () => {
                     <button 
                       className="primary-button" 
                       onClick={() => {
-                        // Note: Contract doesn't have leave_session, but we can show info
-                        alert('To leave this session, wait for it to end or create a new session. The session will automatically end when resolved.');
+                        setShowSessionDetailsOverlay(true);
                       }}
                       style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#000', color: '#FFD700', width: '100%' }}
                     >
