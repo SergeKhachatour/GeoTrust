@@ -1170,15 +1170,26 @@ const App: React.FC = () => {
       
       // Check a small range around the max session ID we've seen (for new sessions)
       const checkRange = 20; // Check 20 sessions ahead of max seen
-      const startRange = Math.max(1, maxSessionIdSeenRef.current);
-      const endRange = Math.min(200, maxSessionIdSeenRef.current + checkRange);
-      for (let id = startRange; id <= endRange; id++) {
-        sessionIdsToCheck.add(id);
-      }
       
-      // Also check a small range at the beginning (sessions 1-10) in case we missed early ones
-      for (let id = 1; id <= 10; id++) {
-        sessionIdsToCheck.add(id);
+      // If we haven't seen any sessions yet, check a wider initial range (1-100)
+      // to discover existing sessions
+      if (maxSessionIdSeenRef.current === 0) {
+        // Initial discovery: check a wider range
+        for (let id = 1; id <= 100; id++) {
+          sessionIdsToCheck.add(id);
+        }
+      } else {
+        // Normal operation: check around max seen
+        const startRange = Math.max(1, maxSessionIdSeenRef.current);
+        const endRange = Math.min(200, maxSessionIdSeenRef.current + checkRange);
+        for (let id = startRange; id <= endRange; id++) {
+          sessionIdsToCheck.add(id);
+        }
+        
+        // Also check a small range at the beginning (sessions 1-10) in case we missed early ones
+        for (let id = 1; id <= 10; id++) {
+          sessionIdsToCheck.add(id);
+        }
       }
       
       const sessionIdsArray = Array.from(sessionIdsToCheck).sort((a, b) => a - b);
@@ -2539,6 +2550,12 @@ const App: React.FC = () => {
                           joinedExisting = true;
                           console.log('[App] ✅ Joined existing session:', sessionId);
                           
+                          // Track this session ID for future polling
+                          if (sessionId) {
+                            knownActiveSessionIdsRef.current.add(sessionId);
+                            maxSessionIdSeenRef.current = Math.max(maxSessionIdSeenRef.current, sessionId);
+                          }
+                          
                           // If this was the 2nd player, start_game should have been called by the contract
                           if (session.player1) {
                             console.log('[App] This was the 2nd player - start_game should have been called on Game Hub');
@@ -2566,6 +2583,12 @@ const App: React.FC = () => {
                 console.log('[App] No waiting session found, creating new session with:', { cellId, countryCode });
                 sessionId = await contractClient.createSession();
                 console.log('[App] Session created, ID:', sessionId);
+                
+                // Track this session ID for future polling
+                if (sessionId) {
+                  knownActiveSessionIdsRef.current.add(sessionId);
+                  maxSessionIdSeenRef.current = Math.max(maxSessionIdSeenRef.current, sessionId);
+                }
                 
                 // Wait for transaction to be included
                 await new Promise(resolve => setTimeout(resolve, 3000));
@@ -2934,6 +2957,12 @@ const App: React.FC = () => {
 
             setSessionLink(`${window.location.origin}?session=${sessionId}`);
             alert(`Successfully joined session ${sessionId}!`);
+            
+            // Track this session ID for future polling
+            if (sessionId) {
+              knownActiveSessionIdsRef.current.add(sessionId);
+              maxSessionIdSeenRef.current = Math.max(maxSessionIdSeenRef.current, sessionId);
+            }
             
             // Refresh active sessions
             await fetchActiveSessions();
