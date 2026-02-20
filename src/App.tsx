@@ -2323,10 +2323,22 @@ const App: React.FC = () => {
       
       try {
         const publicKey = await wallet.getPublicKey(true);
-        // Check if user is in any active session
+        // Check if user is in any active session (exclude Ended sessions)
         for (const session of activeSessions) {
           if ((session.player1 === publicKey || session.player2 === publicKey) && 
               (session.state === 'Waiting' || session.state === 'Active')) {
+            // Double-check session state from contract to ensure it's not ended
+            try {
+              const contractSession = await readOnlyClient?.getSession(session.sessionId);
+              if (contractSession && contractSession.state === 'Ended') {
+                console.log('[App] Session', session.sessionId, 'is ended, clearing user session');
+                setUserCurrentSession(null);
+                continue;
+              }
+            } catch (error) {
+              console.warn('[App] Could not verify session state from contract:', error);
+            }
+            
             setUserCurrentSession(session.sessionId);
             // Set session link if found
             if (session.sessionId) {
