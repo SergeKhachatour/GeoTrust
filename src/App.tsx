@@ -270,7 +270,6 @@ const App: React.FC = () => {
   const endedSessionsRef = useRef<Set<number>>(new Set());
   const [gamePanelMinimized, setGamePanelMinimized] = useState(false);
   const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
-  const [otherSessionsMinimized, setOtherSessionsMinimized] = useState(false);
   const [adminPanelMinimized, setAdminPanelMinimized] = useState(false);
   
   // Confirmation and notification overlay states
@@ -4724,66 +4723,7 @@ const App: React.FC = () => {
                   </CollapsiblePanel>
                 )}
                 
-                {/* Show other active sessions - always show all sessions except user's current one */}
-                <CollapsiblePanel
-                  title={userCurrentSession !== null ? 'Other Sessions' : 'Active Sessions'}
-                  minimized={otherSessionsMinimized}
-                  onToggleMinimize={() => setOtherSessionsMinimized(!otherSessionsMinimized)}
-                  className=""
-                  style={{ marginTop: '8px' }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                    {activeSessions.filter(s => s.sessionId !== userCurrentSession && s.state !== 'Ended').length > 0 ? (
-                      activeSessions
-                        .filter(s => s.sessionId !== userCurrentSession && s.state !== 'Ended')
-                        .map(session => (
-                        <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
-                          <div><strong>Session #{session.sessionId}</strong></div>
-                          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div>
-                              <strong>Player 1:</strong> {session.player1 ? (
-                                <span>
-                                  {session.player1.slice(0, 6)}...{session.player1.slice(-4)}
-                                  {session.p1CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p1CellId})</span>}
-                                  {session.p1Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p1Country})</span>}
-                                </span>
-                              ) : 'Waiting...'}
-                            </div>
-                            <div>
-                              <strong>Player 2:</strong> {session.player2 ? (
-                                <span>
-                                  {session.player2.slice(0, 6)}...{session.player2.slice(-4)}
-                                  {session.p2CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p2CellId})</span>}
-                                  {session.p2Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p2Country})</span>}
-                                </span>
-                              ) : 'Waiting...'}
-                            </div>
-                            <div><strong>State:</strong> {session.state}</div>
-                            {session.createdLedger && (
-                              <div style={{ color: '#666', fontSize: '10px' }}>
-                                Created at ledger: {session.createdLedger}
-                              </div>
-                            )}
-                          </div>
-                          {session.state === 'Waiting' && (
-                            <button 
-                              className="primary-button" 
-                              onClick={() => handleJoinSession(session.sessionId)}
-                              style={{ marginTop: '8px', padding: '6px 12px', fontSize: '11px', width: '100%' }}
-                              disabled={userCurrentSession !== null}
-                            >
-                              {userCurrentSession !== null ? 'Already in a Session' : 'Join Session'}
-                            </button>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <div style={{ padding: '12px', textAlign: 'center', color: '#666', fontSize: '12px' }}>
-                        No other active sessions found. Sessions will appear here when other players create or join sessions.
-                      </div>
-                    )}
-                  </div>
-                </CollapsiblePanel>
+                {/* Legacy Other Sessions Panel - REMOVED, now in CombinedSessionsPanel */}
                 
                 {isAdmin && (
                   <AdminPanel
