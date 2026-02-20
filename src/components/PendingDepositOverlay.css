@@ -1,0 +1,161 @@
+.pending-deposit-overlay-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.pending-deposit-overlay-modal {
+  background-color: #282c34;
+  color: #fff;
+  border-radius: 10px;
+  padding: 25px;
+  width: 90%;
+  max-width: 600px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  border: 1px solid #444;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.pending-deposit-overlay-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #444;
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+}
+
+.pending-deposit-overlay-header h2 {
+  margin: 0;
+  font-size: 1.4em;
+  color: #FFD700;
+}
+
+.pending-deposit-overlay-close {
+  background: none;
+  border: none;
+  font-size: 1.8em;
+  color: #aaa;
+  cursor: pointer;
+  padding: 0 5px;
+}
+
+.pending-deposit-overlay-close:hover {
+  color: #fff;
+}
+
+.pending-deposit-overlay-body {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.deposit-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.deposit-detail-section h3 {
+  margin: 10px 0 5px 0;
+  color: #FFD700;
+  font-size: 1.1em;
+}
+
+.deposit-detail-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.deposit-detail-row:last-child {
+  border-bottom: none;
+}
+
+.deposit-detail-row label {
+  color: #aaa;
+  font-weight: 500;
+}
+
+.deposit-detail-row span {
+  color: #fff;
+  word-break: break-word;
+}
+
+.deposit-amount {
+  color: #FFD700;
+  font-weight: 600;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #000;
+}
+
+.pending-deposit-overlay-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 15px;
+  border-top: 1px solid #444;
+  margin-top: 15px;
+}
+
+.pending-deposit-overlay-footer .primary-button {
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 1em;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border: none;
+  background-color: #FFD700;
+  color: #000;
+  font-weight: 600;
+}
+
+.pending-deposit-overlay-footer .primary-button:hover:not(:disabled) {
+  background-color: #e0b800;
+}
+
+.pending-deposit-overlay-footer .primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pending-deposit-overlay-footer .secondary-button {
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 1em;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border: none;
+  background-color: #555;
+  color: #fff;
+}
+
+.pending-deposit-overlay-footer .secondary-button:hover:not(:disabled) {
+  background-color: #666;
+}
+
+.pending-deposit-overlay-footer .secondary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

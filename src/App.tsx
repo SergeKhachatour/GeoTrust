@@ -1748,7 +1748,12 @@ const App: React.FC = () => {
       const finalRpcUrl = isDevelopment 
         ? `${window.location.protocol}//${window.location.hostname}:8080/api/soroban-rpc`
         : rpcUrl;
-      const rpc = new (await import('@stellar/stellar-sdk')).rpc.Server(finalRpcUrl);
+      // Allow HTTP for localhost development
+      const rpcOptions: any = {};
+      if (isDevelopment && finalRpcUrl.startsWith('http://')) {
+        rpcOptions.allowHttp = true;
+      }
+      const rpc = new (await import('@stellar/stellar-sdk')).rpc.Server(finalRpcUrl, rpcOptions);
       const sourceAccount = await rpc.getAccount(publicKey);
 
       // Convert parameters to ScVal
@@ -4377,7 +4382,7 @@ const App: React.FC = () => {
                 />
                 
                 {/* Pending Deposit Actions */}
-                {walletAddress && pendingDeposits.length > 0 && (
+                {walletAddress && (
                   <PendingDepositActions
                     deposits={pendingDeposits}
                     onApprove={handleApproveDeposit}
