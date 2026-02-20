@@ -262,6 +262,8 @@ const App: React.FC = () => {
   const [accountBalance, setAccountBalance] = useState<string | null>(null);
   const [userCurrentSession, setUserCurrentSession] = useState<number | null>(null);
   const [pendingSessionJoin, setPendingSessionJoin] = useState<number | null>(null);
+  // Track sessions that the user has explicitly ended (so we don't re-add them)
+  const endedSessionsRef = useRef<Set<number>>(new Set());
   const [gamePanelMinimized, setGamePanelMinimized] = useState(false);
   const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
   const [otherSessionsMinimized, setOtherSessionsMinimized] = useState(false);
