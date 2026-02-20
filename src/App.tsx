@@ -3874,14 +3874,29 @@ const App: React.FC = () => {
                 )}
                 
                 {/* Show active sessions even without wallet */}
-                {activeSessions.length > 0 && (
+                {activeSessions.filter(s => s.state !== 'Ended').length > 0 && (
                   <div className="game-panel" style={{ marginTop: '8px' }}>
                     <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
                       {wallet ? 'Other Sessions' : 'Active Sessions'}
+                      <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
+                        ({activeSessions.filter(s => s.state !== 'Ended').length} active, {(() => {
+                          const activePlayers = new Set<string>();
+                          activeSessions.filter(s => s.state !== 'Ended').forEach(s => {
+                            if (s.player1) activePlayers.add(s.player1);
+                            if (s.player2) activePlayers.add(s.player2);
+                          });
+                          return activePlayers.size;
+                        })()} players)
+                      </span>
                     </h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
                       {activeSessions
-                        .filter(s => wallet ? s.sessionId !== userCurrentSession : true)
+                        .filter(s => {
+                          // Filter out user's current session and Ended sessions
+                          if (wallet && s.sessionId === userCurrentSession) return false;
+                          if (s.state === 'Ended') return false;
+                          return true;
+                        })
                         .map(session => (
                         <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
                           <div><strong>Session #{session.sessionId}</strong></div>
