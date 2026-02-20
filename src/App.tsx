@@ -15,7 +15,8 @@ import { CountryManagementOverlay } from './CountryManagementOverlay';
 import { CountryProfileOverlay } from './CountryProfileOverlay';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 import { Horizon } from '@stellar/stellar-sdk';
-import { geolinkApi, NearbyNFT, NearbyContract } from './services/geolinkApi';
+import { geolinkApi, NearbyNFT, NearbyContract, PendingDepositAction } from './services/geolinkApi';
+import { PendingDepositActions } from './components/PendingDepositActions';
 
 // Helper function to construct NFT image URL (matching xyz-wallet exactly)
 function cleanServerUrl(serverUrl: string | null | undefined): string | null {
@@ -246,6 +247,7 @@ const App: React.FC = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   // Note: Sessions are managed entirely on-chain, not in GeoLink
   const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [pendingDeposits, setPendingDeposits] = useState<PendingDepositAction[]>([]);
   const hasCheckedInRef = useRef(false);
   const [readOnlyClient, setReadOnlyClient] = useState<ReadOnlyContractClient | null>(null);
   const [activeSessions, setActiveSessions] = useState<Array<{ 
@@ -1545,12 +1547,189 @@ const App: React.FC = () => {
       }
     };
     
-    // Update immediately, then every 60 seconds
+    // Update immediately, then every 10 seconds (for execution rules to work)
     updateLocationToGeoLink();
-    const interval = setInterval(updateLocationToGeoLink, 60000);
+    const interval = setInterval(updateLocationToGeoLink, 10000);
     
     return () => clearInterval(interval);
   }, [playerLocation, walletAddress]);
+
+  // Handle deposit approval with WebAuthn authentication
+  const handleApproveDeposit = useCallback(async (deposit: PendingDepositAction) => {
+    if (!wallet || !walletAddress) {
+      setNotificationState({
+        isOpen: true,
+        title: 'Error',
+        message: 'Please connect your wallet first',
+        type: 'error',
+        autoClose: 5000,
+      });
+      return;
+    }
+
+    try {
+      // Get wallet public key
+      const publicKey = await wallet.getPublicKey();
+      
+      // Create ContractCallIntent
+      const intent = {
+        network: deposit.parameters.network || 'testnet',
+        rpc_url: process.env.REACT_APP_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org',
+        contract_id: deposit.contract_address,
+        function: deposit.function_name,
+        arguments: Object.entries(deposit.parameters)
+          .filter(([key]) => !key.startsWith('webauthn_'))
+          .map(([key, value]) => ({ name: key, value })),
+        signer: publicKey,
+        rule_binding: {
+          rule_id: deposit.rule_id,
+          rule_name: deposit.rule_name,
+        },
+        nonce: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+      };
+
+      // Encode intent to canonical JSON bytes
+      const intentJson = JSON.stringify(intent, Object.keys(intent).sort());
+      const intentBytes = new TextEncoder().encode(intentJson);
+      const signaturePayload = btoa(String.fromCharCode(...Array.from(intentBytes)));
+
+      // Generate WebAuthn challenge (first 32 bytes of SHA-256 hash)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', intentBytes);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const challenge = hashArray.slice(0, 32);
+
+      // Authenticate with WebAuthn
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge: new Uint8Array(challenge),
+          allowCredentials: [], // Allow any credential
+          userVerification: 'required',
+          timeout: 60000,
+        },
+      }) as PublicKeyCredential;
+
+      if (!credential) {
+        throw new Error('WebAuthn authentication failed');
+      }
+
+      const response = credential.response as AuthenticatorAssertionResponse;
+      const signature = Array.from(new Uint8Array(response.signature));
+      const authenticatorData = Array.from(new Uint8Array(response.authenticatorData));
+      const clientDataJSON = new TextDecoder().decode(response.clientDataJSON);
+      
+      // Convert arrays to base64 strings
+      const signatureBase64 = btoa(String.fromCharCode(...signature));
+      const authenticatorDataBase64 = btoa(String.fromCharCode(...authenticatorData));
+
+      // Get passkey public key (this would need to be stored/retrieved)
+      // For now, we'll need to get it from the credential or stored credentials
+      // This is a simplified version - full implementation would retrieve stored passkey
+      const passkeyPublicKey = ''; // TODO: Retrieve from stored credentials
+
+      // Execute deposit via GeoLink
+      await geolinkApi.executePendingDeposit(deposit.id, {
+        public_key: publicKey,
+        user_secret_key: '', // TODO: Get from secure storage (encrypted with passkey)
+        webauthn_signature: signatureBase64,
+        webauthn_authenticator_data: authenticatorDataBase64,
+        webauthn_client_data: btoa(clientDataJSON),
+        signature_payload: signaturePayload,
+        passkey_public_key_spki: passkeyPublicKey,
+      });
+
+      setNotificationState({
+        isOpen: true,
+        title: 'Success',
+        message: `Deposit executed successfully for ${deposit.contract_name}`,
+        type: 'success',
+        autoClose: 5000,
+      });
+
+      // Refresh pending deposits
+      const updatedDeposits = await geolinkApi.getPendingDeposits(walletAddress);
+      setPendingDeposits(updatedDeposits);
+    } catch (error: any) {
+      console.error('[App] Failed to approve deposit:', error);
+      setNotificationState({
+        isOpen: true,
+        title: 'Error',
+        message: `Failed to execute deposit: ${error.message || 'Unknown error'}`,
+        type: 'error',
+        autoClose: 5000,
+      });
+    }
+  }, [wallet, walletAddress]);
+
+  // Handle deposit decline
+  const handleDeclineDeposit = useCallback(async (deposit: PendingDepositAction) => {
+    if (!walletAddress) return;
+
+    try {
+      await geolinkApi.cancelPendingDeposit(deposit.id, walletAddress);
+      
+      setNotificationState({
+        isOpen: true,
+        title: 'Deposit Cancelled',
+        message: `Deposit for ${deposit.contract_name} has been cancelled`,
+        type: 'info',
+        autoClose: 3000,
+      });
+
+      // Refresh pending deposits
+      const updatedDeposits = await geolinkApi.getPendingDeposits(walletAddress);
+      setPendingDeposits(updatedDeposits);
+    } catch (error: any) {
+      console.error('[App] Failed to decline deposit:', error);
+      setNotificationState({
+        isOpen: true,
+        title: 'Error',
+        message: `Failed to cancel deposit: ${error.message || 'Unknown error'}`,
+        type: 'error',
+        autoClose: 5000,
+      });
+    }
+  }, [walletAddress]);
+
+  // Poll for pending deposits every 30 seconds
+  useEffect(() => {
+    if (!walletAddress) {
+      setPendingDeposits([]);
+      return;
+    }
+
+    const fetchPendingDeposits = async () => {
+      try {
+        const deposits = await geolinkApi.getPendingDeposits(walletAddress);
+        setPendingDeposits(deposits);
+        
+        // Auto-execute deposits if auto_execute is enabled
+        for (const deposit of deposits) {
+          if (deposit.status === 'pending') {
+            // Check if contract has auto_execute enabled
+            const contract = nearbyContracts.find(c => c.id === deposit.contract_id);
+            if (contract?.auto_execute) {
+              console.log('[App] Auto-executing deposit:', deposit.id);
+              try {
+                await handleApproveDeposit(deposit);
+              } catch (error) {
+                console.error('[App] Failed to auto-execute deposit:', error);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[App] Failed to fetch pending deposits:', error);
+      }
+    };
+
+    // Fetch immediately, then every 30 seconds
+    fetchPendingDeposits();
+    const interval = setInterval(fetchPendingDeposits, 30000);
+    
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletAddress, nearbyContracts, handleApproveDeposit]);
 
   // calculateDistance removed - distance is already calculated by GeoLink API
 
@@ -1988,7 +2167,16 @@ const App: React.FC = () => {
             pointer-events: auto;
           `;
           el.innerHTML = '🧮';
-          el.title = contract.name || 'Smart Contract';
+          const contractTitle = contract.name || 'Smart Contract';
+          const autoExecuteText = (contract as any).auto_execute ? ' (Auto-execute)' : '';
+          const ruleNameText = (contract as any).rule_name ? ` - ${(contract as any).rule_name}` : '';
+          el.title = `${contractTitle}${autoExecuteText}${ruleNameText}`;
+          
+          // Add visual indicator for auto-execute contracts
+          if ((contract as any).auto_execute) {
+            el.style.border = '3px solid #FFD700'; // Gold border for auto-execute
+            el.style.boxShadow = '0 4px 12px rgba(255, 215, 0, 0.7)';
+          }
           
           const contractMarker = new mapboxgl.Marker({ element: el })
             .setLngLat([lng, lat])
@@ -3980,6 +4168,16 @@ const App: React.FC = () => {
                   onToggleMinimize={() => setGamePanelMinimized(!gamePanelMinimized)}
                 />
                 
+                {/* Pending Deposit Actions */}
+                {walletAddress && pendingDeposits.length > 0 && (
+                  <PendingDepositActions
+                    deposits={pendingDeposits}
+                    onApprove={handleApproveDeposit}
+                    onDecline={handleDeclineDeposit}
+                    walletAddress={walletAddress}
+                  />
+                )}
+
                 {/* Show user's current session if connected */}
                 {userCurrentSession !== null && (
                   <CollapsiblePanel
@@ -4359,6 +4557,31 @@ const App: React.FC = () => {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  {(selectedMarker.contract as any).radius_meters && (
+                    <div className="marker-popup-field">
+                      <label>Execution Radius:</label>
+                      <span>{(selectedMarker.contract as any).radius_meters.toLocaleString()}m</span>
+                    </div>
+                  )}
+                  {(selectedMarker.contract as any).auto_execute && (
+                    <div className="marker-popup-field" style={{ padding: '6px', backgroundColor: '#fff3cd', borderRadius: '4px', marginTop: '8px' }}>
+                      <span style={{ color: '#856404', fontSize: '11px', fontWeight: 600 }}>
+                        ⚡ Auto-execute enabled
+                      </span>
+                    </div>
+                  )}
+                  {(selectedMarker.contract as any).rule_name && (
+                    <div className="marker-popup-field">
+                      <label>Execution Rule:</label>
+                      <span>{(selectedMarker.contract as any).rule_name}</span>
+                    </div>
+                  )}
+                  {(selectedMarker.contract as any).requires_webauthn && (
+                    <div className="marker-popup-field">
+                      <label>Requires:</label>
+                      <span>WebAuthn Authentication</span>
                     </div>
                   )}
                 </>
