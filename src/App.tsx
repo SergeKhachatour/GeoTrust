@@ -271,6 +271,8 @@ const App: React.FC = () => {
   const [gamePanelMinimized, setGamePanelMinimized] = useState(false);
   const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
   const [adminPanelMinimized, setAdminPanelMinimized] = useState(false);
+  const [nftPanelMinimized, setNftPanelMinimized] = useState(false);
+  const [contractPanelMinimized, setContractPanelMinimized] = useState(false);
   
   // Confirmation and notification overlay states
   const [confirmationState, setConfirmationState] = useState<{
@@ -4340,73 +4342,58 @@ const App: React.FC = () => {
                   </div>
                 )}
                 
-                {/* Show active sessions even without wallet */}
-                {activeSessions.filter(s => s.state !== 'Ended').length > 0 && (
-                  <div className="game-panel" style={{ marginTop: '8px' }}>
-                    <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
-                      {wallet ? 'Other Sessions' : 'Active Sessions'}
-                      <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
-                        ({activeSessions.filter(s => s.state !== 'Ended').length} active, {(() => {
-                          const activePlayers = new Set<string>();
-                          activeSessions.filter(s => s.state !== 'Ended').forEach(s => {
-                            if (s.player1) activePlayers.add(s.player1);
-                            if (s.player2) activePlayers.add(s.player2);
-                          });
-                          return activePlayers.size;
-                        })()} players)
-                      </span>
-                    </h3>
+                {/* NFTs Panel - Show when wallet not connected */}
+                {!wallet && nearbyNFTs.length > 0 && (
+                  <CollapsiblePanel
+                    title={`Nearby NFTs (${nearbyNFTs.length})`}
+                    minimized={nftPanelMinimized}
+                    onToggleMinimize={() => setNftPanelMinimized(!nftPanelMinimized)}
+                    className=""
+                    style={{ marginTop: '8px' }}
+                  >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                      {activeSessions
-                        .filter(s => {
-                          // Filter out user's current session and Ended sessions
-                          if (wallet && s.sessionId === userCurrentSession) return false;
-                          if (s.state === 'Ended') return false;
-                          return true;
-                        })
-                        .map(session => (
-                        <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
-                          <div><strong>Session #{session.sessionId}</strong></div>
-                          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div>
-                              <strong>Player 1:</strong> {session.player1 ? (
-                                <span>
-                                  {session.player1.slice(0, 6)}...{session.player1.slice(-4)}
-                                  {session.p1CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p1CellId})</span>}
-                                  {session.p1Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p1Country})</span>}
-                                </span>
-                              ) : 'Waiting...'}
+                      {nearbyNFTs.map(nft => (
+                        <div key={nft.id} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
+                          <div><strong>{nft.name || 'Unnamed NFT'}</strong></div>
+                          {nft.description && (
+                            <div style={{ marginTop: '4px', color: '#666', fontSize: '11px' }}>{nft.description}</div>
+                          )}
+                          {nft.distance && (
+                            <div style={{ marginTop: '4px', color: '#999', fontSize: '10px' }}>
+                              {nft.distance < 1000 ? `${Math.round(nft.distance)}m away` : `${(nft.distance / 1000).toFixed(1)}km away`}
                             </div>
-                            <div>
-                              <strong>Player 2:</strong> {session.player2 ? (
-                                <span>
-                                  {session.player2.slice(0, 6)}...{session.player2.slice(-4)}
-                                  {session.p2CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p2CellId})</span>}
-                                  {session.p2Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p2Country})</span>}
-                                </span>
-                              ) : 'Waiting...'}
-                            </div>
-                            <div><strong>State:</strong> {session.state}</div>
-                            {session.createdLedger && (
-                              <div style={{ color: '#666', fontSize: '10px' }}>
-                                Created at ledger: {session.createdLedger}
-                              </div>
-                            )}
-                          </div>
-                          {session.state === 'Waiting' && (
-                            <button 
-                              className="primary-button" 
-                              onClick={() => handleJoinSession(session.sessionId)}
-                              style={{ marginTop: '8px', padding: '6px 12px', fontSize: '11px', width: '100%' }}
-                              disabled={userCurrentSession !== null}
-                            >
-                              {userCurrentSession !== null ? 'Already in a Session' : 'Join Session'}
-                            </button>
                           )}
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </CollapsiblePanel>
+                )}
+
+                {/* Smart Contracts Panel - Show when wallet not connected */}
+                {!wallet && nearbyContracts.length > 0 && (
+                  <CollapsiblePanel
+                    title={`Nearby Smart Contracts (${nearbyContracts.length})`}
+                    minimized={contractPanelMinimized}
+                    onToggleMinimize={() => setContractPanelMinimized(!contractPanelMinimized)}
+                    className=""
+                    style={{ marginTop: '8px' }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                      {nearbyContracts.map(contract => (
+                        <div key={contract.id} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
+                          <div><strong>{contract.name || 'Unnamed Contract'}</strong></div>
+                          {contract.description && (
+                            <div style={{ marginTop: '4px', color: '#666', fontSize: '11px' }}>{contract.description}</div>
+                          )}
+                          {contract.distance && (
+                            <div style={{ marginTop: '4px', color: '#999', fontSize: '10px' }}>
+                              {contract.distance < 1000 ? `${Math.round(contract.distance)}m away` : `${(contract.distance / 1000).toFixed(1)}km away`}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsiblePanel>
                 )}
               </div>
             ) : (

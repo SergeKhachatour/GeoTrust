@@ -11,7 +11,7 @@
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .pending-deposits-list::-webkit-scrollbar {
@@ -42,8 +42,8 @@
 .deposit-list-item {
   background-color: #f8f9fa;
   border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 6px;
+  padding: 8px 10px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -56,7 +56,7 @@
 }
 
 .deposit-list-item-header {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .deposit-list-item-title {
@@ -68,7 +68,7 @@
 
 .deposit-list-item-title strong {
   color: #333;
-  font-size: 0.95em;
+  font-size: 0.85em;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -90,9 +90,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  font-size: 0.9em;
-  margin-top: 4px;
+  gap: 12px;
+  font-size: 0.8em;
+  margin-top: 2px;
 }
 
 .deposit-amount-small {
