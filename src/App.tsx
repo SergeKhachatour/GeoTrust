@@ -2285,9 +2285,9 @@ const App: React.FC = () => {
     const checkSessionState = async () => {
       try {
         const session = await readOnlyClient.getSession(userCurrentSession);
-        if (session && session.state === 'Ended') {
-          console.log('[App] Session ended - end_game was called on Game Hub:', userCurrentSession);
-          // Session has ended, could show notification or update UI
+        if (!session || session.state === 'Ended') {
+          console.log('[App] Session ended or not found - end_game was called on Game Hub:', userCurrentSession);
+          // Session has ended, clear user session state
           setUserCurrentSession(null);
           setSessionLink('');
           // Refresh sessions to update UI
