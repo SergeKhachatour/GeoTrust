@@ -1370,7 +1370,7 @@ const App: React.FC = () => {
     } finally {
       isFetchingSessionsRef.current = false;
     }
-  }, [readOnlyClient, updateSessionMarkers]);
+  }, [readOnlyClient, updateSessionMarkers, userCurrentSession]);
 
   // Initialize read-only client on mount (for fetching public data without wallet)
   useEffect(() => {
@@ -2384,7 +2384,7 @@ const App: React.FC = () => {
     } else if (!wallet) {
       setUserCurrentSession(null);
     }
-  }, [wallet, contractClient, activeSessions]);
+  }, [wallet, contractClient, activeSessions, readOnlyClient]);
 
   // Restore wallet connection on page load and handle session URL parameter
   useEffect(() => {
