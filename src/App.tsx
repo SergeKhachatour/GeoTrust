@@ -1352,6 +1352,8 @@ const App: React.FC = () => {
                 console.log('[App] User session', userCurrentSession, 'is ended, clearing');
                 setUserCurrentSession(null);
                 setSessionLink('');
+                // Mark as ended so we don't re-add it
+                endedSessionsRef.current.add(userCurrentSession);
               }
             }
           } catch (error) {
@@ -1359,7 +1361,14 @@ const App: React.FC = () => {
             console.log('[App] User session', userCurrentSession, 'not found, clearing');
             setUserCurrentSession(null);
             setSessionLink('');
+            // Mark as ended so we don't re-add it
+            endedSessionsRef.current.add(userCurrentSession);
           }
+        } else if (endedSessionsRef.current.has(userCurrentSession)) {
+          // User explicitly ended this session, don't keep it as current
+          console.log('[App] User session', userCurrentSession, 'was explicitly ended, clearing');
+          setUserCurrentSession(null);
+          setSessionLink('');
         }
       }
       
@@ -2349,16 +2358,23 @@ const App: React.FC = () => {
       
       try {
         const publicKey = await wallet.getPublicKey(true);
-        // Check if user is in any active session (exclude Ended sessions)
+        // Check if user is in any active session (exclude Ended sessions and sessions user explicitly ended)
         for (const session of activeSessions) {
           if ((session.player1 === publicKey || session.player2 === publicKey) && 
               (session.state === 'Waiting' || session.state === 'Active')) {
+            // Skip if user explicitly ended this session
+            if (endedSessionsRef.current.has(session.sessionId)) {
+              console.log('[App] Skipping session', session.sessionId, '- user explicitly ended it');
+              continue;
+            }
+            
             // Double-check session state from contract to ensure it's not ended
             try {
               const contractSession = await readOnlyClient?.getSession(session.sessionId);
               if (contractSession && contractSession.state === 'Ended') {
                 console.log('[App] Session', session.sessionId, 'is ended, clearing user session');
                 setUserCurrentSession(null);
+                endedSessionsRef.current.add(session.sessionId);
                 continue;
               }
             } catch (error) {
@@ -4054,6 +4070,9 @@ const App: React.FC = () => {
                                     });
                                     return;
                                   }
+                                  
+                                  // Mark this session as ended so we don't re-add it
+                                  endedSessionsRef.current.add(userCurrentSession);
                                   
                                   // Clear current session immediately
                                   setUserCurrentSession(null);
