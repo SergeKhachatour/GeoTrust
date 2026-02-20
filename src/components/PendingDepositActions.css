@@ -1,14 +1,14 @@
 .pending-deposits-panel {
   background-color: #fff;
   border-radius: 8px;
-  padding: 0;
+  padding: 20px;
   border: 1px solid #ddd;
 }
 
 .pending-deposits-list {
   max-height: 400px;
   overflow-y: auto;
-  padding: 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;

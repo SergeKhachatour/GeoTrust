@@ -59,7 +59,7 @@ export const CombinedSessionsPanel: React.FC<CombinedSessionsPanelProps> = ({
       minimized={minimized}
       onToggleMinimize={() => setMinimized(!minimized)}
       className="combined-sessions-panel"
-      style={{ marginTop: '8px' }}
+      style={{ marginTop: '8px', padding: '20px' }}
     >
       {!minimized && (
         <>
