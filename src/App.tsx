@@ -2737,8 +2737,29 @@ const App: React.FC = () => {
                   maxSessionIdSeenRef.current = Math.max(maxSessionIdSeenRef.current, sessionId);
                 }
                 
-                // Wait for transaction to be included
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                // Poll for session to exist before joining (with timeout)
+                let sessionExists = false;
+                let attempts = 0;
+                const maxAttempts = 10;
+                while (!sessionExists && attempts < maxAttempts) {
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                  try {
+                    if (readOnlyClient) {
+                      const session = await readOnlyClient.getSession(sessionId);
+                      if (session) {
+                        sessionExists = true;
+                        console.log('[App] Session is now available, joining...');
+                      }
+                    }
+                  } catch (error) {
+                    // Session not found yet, continue polling
+                  }
+                  attempts++;
+                }
+                
+                if (!sessionExists) {
+                  throw new Error(`Session ${sessionId} was created but is not available yet. Please try again in a moment.`);
+                }
                 
                 console.log('[App] Joining newly created session:', { sessionId, cellId, countryCode });
                 
