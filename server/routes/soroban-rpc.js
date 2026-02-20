@@ -7,39 +7,57 @@ const SOROBAN_RPC_URL = process.env.SOROBAN_RPC_URL || 'https://soroban-testnet.
 
 // Proxy Soroban RPC requests
 router.post('/', (req, res) => {
-  const url = new URL(SOROBAN_RPC_URL);
-  const options = {
-    hostname: url.hostname,
-    port: url.port || 443,
-    path: url.pathname,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'GeoTrust-Soroban-Proxy/1.0',
-    },
-  };
+  try {
+    const url = new URL(SOROBAN_RPC_URL);
+    const options = {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'GeoTrust-Soroban-Proxy/1.0',
+      },
+    };
 
-  const proxyReq = https.request(options, (proxyRes) => {
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Content-Type', 'application/json');
-    
-    res.writeHead(proxyRes.statusCode, res.getHeaders());
-    proxyRes.pipe(res);
-  });
+    const requestBody = JSON.stringify(req.body);
 
-  proxyReq.on('error', (err) => {
-    console.error('Soroban RPC Proxy error:', err);
-    res.status(500).json({ 
-      error: 'Proxy request failed', 
-      message: err.message 
+    const proxyReq = https.request(options, (proxyRes) => {
+      // Set CORS headers
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Content-Type', 'application/json');
+      
+      let responseData = '';
+      
+      proxyRes.on('data', (chunk) => {
+        responseData += chunk;
+      });
+      
+      proxyRes.on('end', () => {
+        res.status(proxyRes.statusCode).send(responseData);
+      });
     });
-  });
 
-  // Forward request body
-  req.pipe(proxyReq);
+    proxyReq.on('error', (err) => {
+      console.error('Soroban RPC Proxy error:', err);
+      res.status(500).json({ 
+        error: 'Proxy request failed', 
+        message: err.message 
+      });
+    });
+
+    // Send request body
+    proxyReq.write(requestBody);
+    proxyReq.end();
+  } catch (error) {
+    console.error('Soroban RPC Proxy setup error:', error);
+    res.status(500).json({ 
+      error: 'Proxy setup failed', 
+      message: error.message 
+    });
+  }
 });
 
 module.exports = router;

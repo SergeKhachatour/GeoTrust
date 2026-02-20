@@ -1754,7 +1754,17 @@ const App: React.FC = () => {
         rpcOptions.allowHttp = true;
       }
       const rpc = new (await import('@stellar/stellar-sdk')).rpc.Server(finalRpcUrl, rpcOptions);
-      const sourceAccount = await rpc.getAccount(publicKey);
+      
+      // Get account for sequence - handle account not found error
+      let sourceAccount;
+      try {
+        sourceAccount = await rpc.getAccount(publicKey);
+      } catch (error: any) {
+        if (error.message && error.message.includes('Account not found')) {
+          throw new Error('Account not found. Please ensure your account is funded on the Stellar network.');
+        }
+        throw error;
+      }
 
       // Convert parameters to ScVal
       const { Address, nativeToScVal, TransactionBuilder, BASE_FEE, Networks } = await import('@stellar/stellar-sdk');
@@ -1861,10 +1871,21 @@ const App: React.FC = () => {
       setPendingDeposits(updatedDeposits);
     } catch (error: any) {
       console.error('[App] Failed to approve deposit:', error);
+      let errorMessage = error.message || 'Unknown error';
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes('Account not found')) {
+        errorMessage = 'Account not found. Please ensure your account is funded on the Stellar network.';
+      } else if (errorMessage.includes('Proxy request failed') || errorMessage.includes('500')) {
+        errorMessage = 'Backend server error. Please check if the backend is running on port 8080.';
+      } else if (errorMessage.includes('Secret key required')) {
+        errorMessage = 'Passkey authentication requires secret key. Falling back to wallet signing.';
+      }
+      
       setNotificationState({
         isOpen: true,
         title: 'Error',
-        message: `Failed to execute deposit: ${error.message || 'Unknown error'}`,
+        message: `Failed to execute deposit: ${errorMessage}`,
         type: 'error',
         autoClose: 5000,
       });
