@@ -1577,9 +1577,9 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Handle deposit approval - use wallet signing for now (simpler than WebAuthn)
+  // Handle deposit approval - supports both wallet signing (default) and passkey (optional)
   const handleApproveDeposit = useCallback(async (deposit: PendingDepositAction) => {
-    if (!wallet || !walletAddress) {
+    if (!wallet || !walletAddress || !contractClient) {
       setNotificationState({
         isOpen: true,
         title: 'Error',
@@ -1591,22 +1591,156 @@ const App: React.FC = () => {
     }
 
     try {
-      // For now, we'll use wallet signing instead of WebAuthn
-      // This is simpler and doesn't require passkey setup
-      // TODO: Add passkey support later similar to xyz-wallet
+      // Check if passkey is available - if so, use WebAuthn method
+      // Otherwise, use wallet signing (simpler, no setup required)
+      const hasPasskey = await checkPasskeyAvailable();
       
+      if (hasPasskey) {
+        // TODO: Implement passkey-based deposit execution
+        // For now, fall through to wallet signing
+        console.log('[App] Passkey available but not yet implemented, using wallet signing');
+      }
+
+      // Use wallet signing method (default)
       setNotificationState({
         isOpen: true,
-        title: 'Info',
-        message: 'Deposit execution requires passkey setup. Please set up a passkey first, or use wallet signing (coming soon).',
+        title: 'Executing Deposit',
+        message: 'Preparing deposit transaction...',
         type: 'info',
+        autoClose: 0, // Don't auto-close
+      });
+
+      // Get deposit parameters
+      const amount = deposit.parameters.amount || '0';
+      const asset = deposit.parameters.asset || 'XLM';
+      const userAddress = deposit.parameters.user_address || walletAddress;
+
+      // Convert amount from stroops to XLM (if XLM)
+      let amountInStroops: string;
+      if (asset === 'XLM' || asset.includes('XLM')) {
+        const amountNum = parseFloat(amount);
+        amountInStroops = Math.floor(amountNum * 10000000).toString();
+      } else {
+        amountInStroops = amount;
+      }
+
+      // Call the deposit function on the contract directly
+      // The contract address is in deposit.contract_address
+      const depositContract = new (await import('@stellar/stellar-sdk')).Contract(deposit.contract_address);
+      const publicKey = await wallet.getPublicKey();
+      
+      // Get account for sequence
+      const rpcUrl = process.env.REACT_APP_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const finalRpcUrl = isDevelopment 
+        ? `${window.location.protocol}//${window.location.hostname}:8080/api/soroban-rpc`
+        : rpcUrl;
+      const rpc = new (await import('@stellar/stellar-sdk')).rpc.Server(finalRpcUrl);
+      const sourceAccount = await rpc.getAccount(publicKey);
+
+      // Convert parameters to ScVal
+      const { Address, nativeToScVal, TransactionBuilder, BASE_FEE, Networks } = await import('@stellar/stellar-sdk');
+      const userAddressScVal = new Address(userAddress).toScVal();
+      const assetScVal = new Address(asset).toScVal(); // Assuming asset is an address
+      
+      // Convert amount to i128 using nativeToScVal
+      // nativeToScVal can handle numbers and will convert to appropriate ScVal type
+      const amountNum = parseInt(amountInStroops, 10);
+      const amountScVal = nativeToScVal(amountNum, { type: 'i128' });
+
+      // Build transaction
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(depositContract.call('deposit', userAddressScVal, assetScVal, amountScVal))
+        .setTimeout(300)
+        .build();
+
+      // Simulate first
+      const simResponse = await rpc.simulateTransaction(transaction);
+      if ('error' in simResponse) {
+        throw new Error(`Simulation failed: ${JSON.stringify(simResponse.error)}`);
+      }
+
+      // Prepare transaction
+      const prepared = await rpc.prepareTransaction(transaction);
+      const xdrString = prepared.toXDR();
+
+      // Sign with wallet
+      setNotificationState({
+        isOpen: true,
+        title: 'Sign Transaction',
+        message: 'Please approve the transaction in your wallet...',
+        type: 'info',
+        autoClose: 0,
+      });
+
+      const signedXdr = await wallet.signTransaction(xdrString, Networks.TESTNET);
+      const signedTx = TransactionBuilder.fromXDR(signedXdr, Networks.TESTNET);
+
+      // Send transaction
+      setNotificationState({
+        isOpen: true,
+        title: 'Sending Transaction',
+        message: 'Submitting deposit transaction...',
+        type: 'info',
+        autoClose: 0,
+      });
+
+      const sendResponse = await rpc.sendTransaction(signedTx);
+      
+      if (sendResponse.status === 'ERROR') {
+        throw new Error(`Transaction failed: ${JSON.stringify(sendResponse.errorResult)}`);
+      }
+
+      // Wait for transaction to be included and get hash/ledger
+      let transactionHash: string | undefined;
+      let ledger: number | undefined;
+      
+      if (sendResponse.hash) {
+        transactionHash = sendResponse.hash;
+        // Wait a bit for transaction to be included, then get ledger
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          const txResult = await rpc.getTransaction(sendResponse.hash);
+          if (txResult && 'ledger' in txResult) {
+            ledger = txResult.ledger;
+          } else if (txResult && typeof txResult === 'object' && 'ledgerSeq' in txResult) {
+            ledger = (txResult as any).ledgerSeq;
+          }
+        } catch (error) {
+          console.warn('[App] Could not get transaction ledger, using latest ledger');
+          const latestLedger = await rpc.getLatestLedger();
+          ledger = latestLedger.sequence;
+        }
+      }
+
+      // Report completion to GeoLink
+      if (transactionHash && ledger) {
+        try {
+          const { GeoLinkDepositService } = await import('./services/geoLinkDepositService');
+          const depositService = new GeoLinkDepositService(
+            process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY || ''
+          );
+          await depositService.reportDepositCompletion(deposit.id, walletAddress, transactionHash, ledger);
+        } catch (reportError) {
+          console.warn('[App] Failed to report deposit completion to GeoLink:', reportError);
+          // Don't fail the whole operation if reporting fails
+        }
+      }
+
+      setNotificationState({
+        isOpen: true,
+        title: 'Success',
+        message: `Deposit executed successfully!${transactionHash ? ` Transaction: ${transactionHash.slice(0, 8)}...` : ''}`,
+        type: 'success',
         autoClose: 5000,
       });
-      
-      // For now, just cancel the deposit since we don't have passkey support yet
-      // In the future, we can implement wallet signing as an alternative
-      console.log('[App] Deposit execution requires passkey - skipping for now');
-      
+
+      // Refresh pending deposits
+      const updatedDeposits = await geolinkApi.getPendingDeposits(walletAddress);
+      setPendingDeposits(updatedDeposits);
     } catch (error: any) {
       console.error('[App] Failed to approve deposit:', error);
       setNotificationState({
@@ -1617,7 +1751,7 @@ const App: React.FC = () => {
         autoClose: 5000,
       });
     }
-  }, [wallet, walletAddress]);
+  }, [wallet, walletAddress, contractClient, checkPasskeyAvailable]);
 
   // Handle deposit decline
   const handleDeclineDeposit = useCallback(async (deposit: PendingDepositAction) => {
@@ -1661,33 +1795,20 @@ const App: React.FC = () => {
         const deposits = await geolinkApi.getPendingDeposits(walletAddress);
         setPendingDeposits(deposits);
         
-        // Auto-execute deposits if auto_execute is enabled AND passkey is available
-        // Skip auto-execute if no passkey to avoid WebAuthn prompts
-        const hasPasskey = await checkPasskeyAvailable();
-        if (hasPasskey) {
-          for (const deposit of deposits) {
-            if (deposit.status === 'pending') {
-              // Check if contract has auto_execute enabled
-              const contract = nearbyContracts.find(c => c.id === deposit.contract_id);
-              if (contract?.auto_execute) {
-                console.log('[App] Auto-executing deposit:', deposit.id);
-                try {
-                  await handleApproveDeposit(deposit);
-                } catch (error) {
-                  console.error('[App] Failed to auto-execute deposit:', error);
-                }
+        // Auto-execute deposits if auto_execute is enabled
+        // With wallet signing, we can auto-execute even without passkey
+        for (const deposit of deposits) {
+          if (deposit.status === 'pending') {
+            // Check if contract has auto_execute enabled
+            const contract = nearbyContracts.find(c => c.id === deposit.contract_id);
+            if (contract?.auto_execute) {
+              console.log('[App] Auto-executing deposit:', deposit.id);
+              try {
+                await handleApproveDeposit(deposit);
+              } catch (error) {
+                console.error('[App] Failed to auto-execute deposit:', error);
               }
             }
-          }
-        } else {
-          // Log that auto-execute is skipped due to no passkey
-          const autoExecuteDeposits = deposits.filter(d => {
-            if (d.status !== 'pending') return false;
-            const contract = nearbyContracts.find(c => c.id === d.contract_id);
-            return contract?.auto_execute;
-          });
-          if (autoExecuteDeposits.length > 0) {
-            console.log('[App] Skipping auto-execute for', autoExecuteDeposits.length, 'deposits - passkey not set up');
           }
         }
       } catch (error) {

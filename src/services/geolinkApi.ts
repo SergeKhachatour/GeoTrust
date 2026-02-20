@@ -578,16 +578,19 @@ class GeoLinkApiClient {
 
   /**
    * Execute a pending deposit action (uses Wallet Provider key)
-   * Requires WebAuthn authentication and secret key
+   * Supports both WebAuthn (passkey) and wallet signing methods
    */
   async executePendingDeposit(actionId: string, executionData: {
     public_key: string;
-    user_secret_key: string;
-    webauthn_signature: string;
-    webauthn_authenticator_data: string;
-    webauthn_client_data: string;
-    signature_payload: string;
-    passkey_public_key_spki: string;
+    user_secret_key?: string;
+    webauthn_signature?: string;
+    webauthn_authenticator_data?: string;
+    webauthn_client_data?: string;
+    signature_payload?: string;
+    passkey_public_key_spki?: string;
+    // Wallet signing method (alternative to WebAuthn)
+    transaction_xdr?: string;
+    use_wallet_signing?: boolean;
   }): Promise<any> {
     if (!this.walletProviderKey) {
       throw new Error('Wallet Provider API key is not configured');
@@ -598,6 +601,29 @@ class GeoLinkApiClient {
       {
         method: 'POST',
         body: JSON.stringify(executionData),
+      },
+      true // Use wallet provider key
+    );
+  }
+
+  /**
+   * Report deposit completion when executed directly via wallet signing
+   * (Alternative to executePendingDeposit when using wallet signing)
+   */
+  async reportDepositCompletion(actionId: string, publicKey: string, transactionHash: string, ledger: number): Promise<any> {
+    if (!this.walletProviderKey) {
+      throw new Error('Wallet Provider API key is not configured');
+    }
+    
+    return this.request(
+      `/api/contracts/rules/pending/deposits/${actionId}/complete`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          public_key: publicKey,
+          transaction_hash: transactionHash,
+          ledger: ledger,
+        }),
       },
       true // Use wallet provider key
     );
