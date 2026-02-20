@@ -3101,7 +3101,9 @@ const App: React.FC = () => {
             );
 
             setSessionLink(`${window.location.origin}?session=${sessionId}`);
-            alert(`Successfully joined session ${sessionId}!`);
+            
+            // Update user's current session state immediately
+            setUserCurrentSession(sessionId);
             
             // Track this session ID for future polling
             if (sessionId) {
@@ -3109,8 +3111,17 @@ const App: React.FC = () => {
               maxSessionIdSeenRef.current = Math.max(maxSessionIdSeenRef.current, sessionId);
             }
             
-            // Refresh active sessions
+            // Refresh active sessions to update UI
             await fetchActiveSessions();
+            
+            setNotificationState({
+              isOpen: true,
+              title: 'Success',
+              message: `Successfully joined session #${sessionId}!`,
+              type: 'success',
+              autoClose: 3000,
+            });
+            
             console.log('[App] ✅ Session joined successfully');
             console.log('[App] If this was the second player, start_game should have been called on Game Hub');
             console.log('[App] Check Stellar Expert Game Hub contract to verify start_game transaction');
@@ -4129,9 +4140,9 @@ const App: React.FC = () => {
                   style={{ marginTop: '8px' }}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                    {activeSessions.filter(s => s.sessionId !== userCurrentSession).length > 0 ? (
+                    {activeSessions.filter(s => s.sessionId !== userCurrentSession && s.state !== 'Ended').length > 0 ? (
                       activeSessions
-                        .filter(s => s.sessionId !== userCurrentSession)
+                        .filter(s => s.sessionId !== userCurrentSession && s.state !== 'Ended')
                         .map(session => (
                         <div key={session.sessionId} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
                           <div><strong>Session #{session.sessionId}</strong></div>
@@ -4395,6 +4406,35 @@ const App: React.FC = () => {
                 <div className="marker-popup-field">
                   <label>Status:</label>
                   <span className="marker-popup-status">Active</span>
+                </div>
+              )}
+              {selectedMarker.publicKey && readOnlyClient && (
+                <div className="marker-popup-field" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+                  <label style={{ fontWeight: 600, marginBottom: '8px', display: 'block' }}>Active Sessions:</label>
+                  {(() => {
+                    const userSessions = activeSessions.filter(s => 
+                      (s.player1 === selectedMarker.publicKey || s.player2 === selectedMarker.publicKey) && 
+                      s.state !== 'Ended'
+                    );
+                    if (userSessions.length === 0) {
+                      return <span style={{ color: '#666', fontSize: '12px' }}>No active sessions</span>;
+                    }
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {userSessions.map(session => (
+                          <div key={session.sessionId} style={{ 
+                            padding: '6px', 
+                            backgroundColor: session.state === 'Active' ? '#e8f5e9' : '#fff3cd', 
+                            borderRadius: '4px',
+                            fontSize: '11px'
+                          }}>
+                            <div><strong>Session #{session.sessionId}</strong> - {session.state}</div>
+                            {session.p1CellId && <div style={{ color: '#666', fontSize: '10px' }}>Cell: {session.p1CellId}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               {selectedMarker.publicKey && selectedMarker.type === 'opponent' && walletAddress && (
