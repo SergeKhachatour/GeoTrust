@@ -18,6 +18,7 @@ import { Horizon } from '@stellar/stellar-sdk';
 import { geolinkApi, NearbyNFT, NearbyContract, PendingDepositAction } from './services/geolinkApi';
 import { PendingDepositActions } from './components/PendingDepositActions';
 import { PasskeySetupModal } from './components/PasskeySetupModal';
+import { CombinedSessionsPanel } from './components/CombinedSessionsPanel';
 
 // Helper function to construct NFT image URL (matching xyz-wallet exactly)
 function cleanServerUrl(serverUrl: string | null | undefined): string | null {
@@ -4450,8 +4451,90 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                {/* Show user's current session if connected */}
-                {userCurrentSession !== null && (
+                {/* Combined Sessions Panel */}
+                <CombinedSessionsPanel
+                  userCurrentSession={userCurrentSession}
+                  activeSessions={activeSessions}
+                  walletAddress={walletAddress}
+                  onJoinSession={handleJoinSession}
+                  onEndSession={async (sessionId, isPlayer1, isPlayer2, sessionState) => {
+                    if (!contractClient) return;
+                    
+                    // Get game hub ID
+                    let gameHubId = process.env.REACT_APP_GAME_HUB_ID || null;
+                    if (!gameHubId) {
+                      try {
+                        if (readOnlyClient) {
+                          gameHubId = await readOnlyClient.getGameHub() || null;
+                        }
+                        if (!gameHubId && contractClient) {
+                          gameHubId = await contractClient.getGameHub() || null;
+                        }
+                      } catch (error) {
+                        console.warn('[App] Could not get Game Hub ID:', error);
+                      }
+                    }
+                    
+                    if (!gameHubId) {
+                      setNotificationState({
+                        isOpen: true,
+                        title: 'Error',
+                        message: 'Game Hub ID not configured. Cannot end session.',
+                        type: 'error',
+                        autoClose: 5000,
+                      });
+                      return;
+                    }
+                    
+                    try {
+                      if (sessionState === 'Active') {
+                        // Resolve match
+                        await contractClient.resolveMatch(sessionId);
+                      } else if (sessionState === 'Waiting') {
+                        // Call end_game on Game Hub
+                        const player1Won = isPlayer1;
+                        await contractClient.endGameOnGameHub(gameHubId, sessionId, player1Won);
+                      }
+                      
+                      // Mark this session as ended
+                      endedSessionsRef.current.add(sessionId);
+                      
+                      // Clear current session if it's the one being ended
+                      if (sessionId === userCurrentSession) {
+                        setUserCurrentSession(null);
+                        setSessionLink('');
+                      }
+                      
+                      // Refresh sessions
+                      setTimeout(async () => {
+                        await fetchActiveSessions();
+                      }, 2000);
+                      
+                      setNotificationState({
+                        isOpen: true,
+                        title: 'Session Ended',
+                        message: `Session #${sessionId} ended successfully!`,
+                        type: 'success',
+                        autoClose: 5000,
+                      });
+                    } catch (error: any) {
+                      console.error('Failed to end session:', error);
+                      setNotificationState({
+                        isOpen: true,
+                        title: 'Error',
+                        message: `Failed to end session: ${error.message || error}`,
+                        type: 'error',
+                        autoClose: 7000,
+                      });
+                    }
+                  }}
+                  onViewSessionDetails={() => setShowSessionDetailsOverlay(true)}
+                  contractClient={contractClient}
+                  gameHubId={process.env.REACT_APP_GAME_HUB_ID || null}
+                />
+
+                {/* Legacy Your Session Panel - REMOVED, now in CombinedSessionsPanel */}
+                {false && userCurrentSession !== null && (
                   <CollapsiblePanel
                     title="Your Session"
                     minimized={yourSessionMinimized}
@@ -4468,21 +4551,21 @@ const App: React.FC = () => {
                             <div style={{ marginTop: '4px' }}><strong>Status:</strong> {session?.state || 'Active'}</div>
                             {session?.player1 && (
                               <div style={{ marginTop: '4px' }}>
-                                <strong>Player 1:</strong> {session.player1.slice(0, 6)}...{session.player1.slice(-4)}
-                                {session.p1CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p1CellId})</span>}
-                                {session.p1Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p1Country})</span>}
+                                <strong>Player 1:</strong> {session?.player1?.slice(0, 6)}...{session?.player1?.slice(-4)}
+                                {session?.p1CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session?.p1CellId})</span>}
+                                {session?.p1Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session?.p1Country})</span>}
                               </div>
                             )}
                             {session?.player2 && (
                               <div style={{ marginTop: '4px' }}>
-                                <strong>Player 2:</strong> {session.player2.slice(0, 6)}...{session.player2.slice(-4)}
-                                {session.p2CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session.p2CellId})</span>}
-                                {session.p2Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session.p2Country})</span>}
+                                <strong>Player 2:</strong> {session?.player2?.slice(0, 6)}...{session?.player2?.slice(-4)}
+                                {session?.p2CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session?.p2CellId})</span>}
+                                {session?.p2Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session?.p2Country})</span>}
                               </div>
                             )}
                             {session?.createdLedger && (
                               <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>
-                                Created at ledger: {session.createdLedger}
+                                Created at ledger: {session?.createdLedger}
                               </div>
                             )}
                           </>
@@ -4494,8 +4577,8 @@ const App: React.FC = () => {
                       if (!session || !contractClient) return null;
                       
                       // Check if user is player1 or player2 in this session
-                      const isPlayer1 = session.player1 === walletAddress;
-                      const isPlayer2 = session.player2 === walletAddress;
+                      const isPlayer1 = session!.player1 === walletAddress;
+                      const isPlayer2 = session!.player2 === walletAddress;
                       const isMySession = isPlayer1 || isPlayer2;
                       
                       if (!isMySession) return null;
@@ -4519,11 +4602,11 @@ const App: React.FC = () => {
                                 setConfirmationState(null);
                                 
                                 try {
-                                  if (session.state === 'Active') {
+                                  if (session!.state === 'Active') {
                                     // For Active sessions, use resolveMatch (which calls end_game)
                                     // resolveMatch checks if players matched (same asset_tag and same/adjacent cell_id)
                                     // and determines the winner, then calls Game Hub's end_game
-                                    const result = await contractClient.resolveMatch(userCurrentSession);
+                                    const result = await contractClient.resolveMatch(userCurrentSession!);
                                     
                                     const winnerText = result.winner 
                                       ? `${result.winner.slice(0, 6)}...${result.winner.slice(-4)}`
@@ -4537,7 +4620,7 @@ const App: React.FC = () => {
                                       type: 'success',
                                       autoClose: 5000,
                                     });
-                                  } else if (session.state === 'Waiting') {
+                                  } else if (session!.state === 'Waiting') {
                                     // For Waiting sessions, call Game Hub's end_game directly
                                     // Get Game Hub ID from contract instead of env
                                     let gameHubId: string | null = null;
@@ -4570,7 +4653,7 @@ const App: React.FC = () => {
                                     // Call end_game on Game Hub: end_game(session_id: u32, player1_won: bool)
                                     // For waiting sessions, we'll set player1_won based on who is ending it
                                     const player1Won = isPlayer1; // If player1 ends it, player1 wins; if player2 ends it, player1 loses
-                                    await contractClient.endGameOnGameHub(gameHubId, userCurrentSession, player1Won);
+                                    await contractClient.endGameOnGameHub(gameHubId, userCurrentSession!, player1Won);
                                     
                                     setNotificationState({
                                       isOpen: true,
@@ -4583,7 +4666,7 @@ const App: React.FC = () => {
                                     setNotificationState({
                                       isOpen: true,
                                       title: 'Error',
-                                      message: `Cannot end session in ${session.state} state.`,
+                                      message: `Cannot end session in ${session!.state} state.`,
                                       type: 'error',
                                       autoClose: 5000,
                                     });
@@ -4591,7 +4674,9 @@ const App: React.FC = () => {
                                   }
                                   
                                   // Mark this session as ended so we don't re-add it
-                                  endedSessionsRef.current.add(userCurrentSession);
+                                  if (userCurrentSession !== null) {
+                                    endedSessionsRef.current.add(userCurrentSession);
+                                  }
                                   
                                   // Clear current session immediately
                                   setUserCurrentSession(null);
@@ -4623,7 +4708,7 @@ const App: React.FC = () => {
                           }}
                           style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#dc3545', color: '#fff', width: '100%', marginBottom: '8px' }}
                         >
-                          {session.state === 'Active' ? 'End Session (Resolve Match)' : 'End Session'}
+                          {session!.state === 'Active' ? 'End Session (Resolve Match)' : 'End Session'}
                         </button>
                       );
                     })()}
