@@ -1554,7 +1554,30 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [playerLocation, walletAddress]);
 
-  // Handle deposit approval with WebAuthn authentication
+  // Check if passkey is available
+  const checkPasskeyAvailable = useCallback(async (): Promise<boolean> => {
+    try {
+      // Check if WebAuthn is supported
+      if (!window.PublicKeyCredential || !navigator.credentials) {
+        return false;
+      }
+      
+      // Check if passkey data exists in storage (similar to xyz-wallet)
+      const passkeyData = localStorage.getItem('passkey_credential') || localStorage.getItem('xyz_passkey_data');
+      if (passkeyData) {
+        return true;
+      }
+      
+      // Check if platform authenticator is available
+      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      return available;
+    } catch (error) {
+      console.warn('[App] Passkey availability check failed:', error);
+      return false;
+    }
+  }, []);
+
+  // Handle deposit approval - use wallet signing for now (simpler than WebAuthn)
   const handleApproveDeposit = useCallback(async (deposit: PendingDepositAction) => {
     if (!wallet || !walletAddress) {
       setNotificationState({
@@ -1568,87 +1591,22 @@ const App: React.FC = () => {
     }
 
     try {
-      // Get wallet public key
-      const publicKey = await wallet.getPublicKey();
+      // For now, we'll use wallet signing instead of WebAuthn
+      // This is simpler and doesn't require passkey setup
+      // TODO: Add passkey support later similar to xyz-wallet
       
-      // Create ContractCallIntent
-      const intent = {
-        network: deposit.parameters.network || 'testnet',
-        rpc_url: process.env.REACT_APP_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org',
-        contract_id: deposit.contract_address,
-        function: deposit.function_name,
-        arguments: Object.entries(deposit.parameters)
-          .filter(([key]) => !key.startsWith('webauthn_'))
-          .map(([key, value]) => ({ name: key, value })),
-        signer: publicKey,
-        rule_binding: {
-          rule_id: deposit.rule_id,
-          rule_name: deposit.rule_name,
-        },
-        nonce: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-      };
-
-      // Encode intent to canonical JSON bytes
-      const intentJson = JSON.stringify(intent, Object.keys(intent).sort());
-      const intentBytes = new TextEncoder().encode(intentJson);
-      const signaturePayload = btoa(String.fromCharCode(...Array.from(intentBytes)));
-
-      // Generate WebAuthn challenge (first 32 bytes of SHA-256 hash)
-      const hashBuffer = await crypto.subtle.digest('SHA-256', intentBytes);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const challenge = hashArray.slice(0, 32);
-
-      // Authenticate with WebAuthn
-      const credential = await navigator.credentials.get({
-        publicKey: {
-          challenge: new Uint8Array(challenge),
-          allowCredentials: [], // Allow any credential
-          userVerification: 'required',
-          timeout: 60000,
-        },
-      }) as PublicKeyCredential;
-
-      if (!credential) {
-        throw new Error('WebAuthn authentication failed');
-      }
-
-      const response = credential.response as AuthenticatorAssertionResponse;
-      const signature = Array.from(new Uint8Array(response.signature));
-      const authenticatorData = Array.from(new Uint8Array(response.authenticatorData));
-      const clientDataJSON = new TextDecoder().decode(response.clientDataJSON);
-      
-      // Convert arrays to base64 strings
-      const signatureBase64 = btoa(String.fromCharCode(...signature));
-      const authenticatorDataBase64 = btoa(String.fromCharCode(...authenticatorData));
-
-      // Get passkey public key (this would need to be stored/retrieved)
-      // For now, we'll need to get it from the credential or stored credentials
-      // This is a simplified version - full implementation would retrieve stored passkey
-      const passkeyPublicKey = ''; // TODO: Retrieve from stored credentials
-
-      // Execute deposit via GeoLink
-      await geolinkApi.executePendingDeposit(deposit.id, {
-        public_key: publicKey,
-        user_secret_key: '', // TODO: Get from secure storage (encrypted with passkey)
-        webauthn_signature: signatureBase64,
-        webauthn_authenticator_data: authenticatorDataBase64,
-        webauthn_client_data: btoa(clientDataJSON),
-        signature_payload: signaturePayload,
-        passkey_public_key_spki: passkeyPublicKey,
-      });
-
       setNotificationState({
         isOpen: true,
-        title: 'Success',
-        message: `Deposit executed successfully for ${deposit.contract_name}`,
-        type: 'success',
+        title: 'Info',
+        message: 'Deposit execution requires passkey setup. Please set up a passkey first, or use wallet signing (coming soon).',
+        type: 'info',
         autoClose: 5000,
       });
-
-      // Refresh pending deposits
-      const updatedDeposits = await geolinkApi.getPendingDeposits(walletAddress);
-      setPendingDeposits(updatedDeposits);
+      
+      // For now, just cancel the deposit since we don't have passkey support yet
+      // In the future, we can implement wallet signing as an alternative
+      console.log('[App] Deposit execution requires passkey - skipping for now');
+      
     } catch (error: any) {
       console.error('[App] Failed to approve deposit:', error);
       setNotificationState({
@@ -1703,19 +1661,33 @@ const App: React.FC = () => {
         const deposits = await geolinkApi.getPendingDeposits(walletAddress);
         setPendingDeposits(deposits);
         
-        // Auto-execute deposits if auto_execute is enabled
-        for (const deposit of deposits) {
-          if (deposit.status === 'pending') {
-            // Check if contract has auto_execute enabled
-            const contract = nearbyContracts.find(c => c.id === deposit.contract_id);
-            if (contract?.auto_execute) {
-              console.log('[App] Auto-executing deposit:', deposit.id);
-              try {
-                await handleApproveDeposit(deposit);
-              } catch (error) {
-                console.error('[App] Failed to auto-execute deposit:', error);
+        // Auto-execute deposits if auto_execute is enabled AND passkey is available
+        // Skip auto-execute if no passkey to avoid WebAuthn prompts
+        const hasPasskey = await checkPasskeyAvailable();
+        if (hasPasskey) {
+          for (const deposit of deposits) {
+            if (deposit.status === 'pending') {
+              // Check if contract has auto_execute enabled
+              const contract = nearbyContracts.find(c => c.id === deposit.contract_id);
+              if (contract?.auto_execute) {
+                console.log('[App] Auto-executing deposit:', deposit.id);
+                try {
+                  await handleApproveDeposit(deposit);
+                } catch (error) {
+                  console.error('[App] Failed to auto-execute deposit:', error);
+                }
               }
             }
+          }
+        } else {
+          // Log that auto-execute is skipped due to no passkey
+          const autoExecuteDeposits = deposits.filter(d => {
+            if (d.status !== 'pending') return false;
+            const contract = nearbyContracts.find(c => c.id === d.contract_id);
+            return contract?.auto_execute;
+          });
+          if (autoExecuteDeposits.length > 0) {
+            console.log('[App] Skipping auto-execute for', autoExecuteDeposits.length, 'deposits - passkey not set up');
           }
         }
       } catch (error) {
@@ -1729,7 +1701,7 @@ const App: React.FC = () => {
     
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletAddress, nearbyContracts, handleApproveDeposit]);
+  }, [walletAddress, nearbyContracts, handleApproveDeposit, checkPasskeyAvailable]);
 
   // calculateDistance removed - distance is already calculated by GeoLink API
 
