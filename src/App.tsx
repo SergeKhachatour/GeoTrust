@@ -4053,15 +4053,21 @@ const App: React.FC = () => {
                                     return;
                                   }
                                   
-                                  // Clear current session
+                                  // Clear current session immediately
                                   setUserCurrentSession(null);
+                                  setSessionLink('');
                                   
-                                  // Refresh sessions after ending
-                                  setTimeout(() => {
+                                  // Refresh sessions after ending (with multiple attempts to ensure state is updated)
+                                  const refreshSessions = async () => {
                                     if (readOnlyClient) {
-                                      fetchActiveSessions();
+                                      await fetchActiveSessions();
+                                      // Check again after a short delay to ensure session state is updated
+                                      setTimeout(async () => {
+                                        await fetchActiveSessions();
+                                      }, 3000);
                                     }
-                                  }, 2000);
+                                  };
+                                  refreshSessions();
                                 } catch (error: any) {
                                   console.error('Failed to end session:', error);
                                   setNotificationState({
