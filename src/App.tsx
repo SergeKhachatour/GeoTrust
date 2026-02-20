@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './App.css';
@@ -17,6 +17,7 @@ import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 import { Horizon } from '@stellar/stellar-sdk';
 import { geolinkApi, NearbyNFT, NearbyContract, PendingDepositAction } from './services/geolinkApi';
 import { PendingDepositActions } from './components/PendingDepositActions';
+import { PasskeySetupModal } from './components/PasskeySetupModal';
 
 // Helper function to construct NFT image URL (matching xyz-wallet exactly)
 function cleanServerUrl(serverUrl: string | null | undefined): string | null {
@@ -297,6 +298,7 @@ const App: React.FC = () => {
   
   // Session details overlay state
   const [showSessionDetailsOverlay, setShowSessionDetailsOverlay] = useState(false);
+  const [showPasskeySetupModal, setShowPasskeySetupModal] = useState(false);
   const [countryNameCache, setCountryNameCache] = useState<Map<number, string>>(new Map());
   
   // Refs for NFT and contract markers (matching xyz-wallet pattern)
@@ -1554,28 +1556,33 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [playerLocation, walletAddress]);
 
+  // Import passkey service
+  const passkeyService = useMemo(() => {
+    try {
+      const { passkeyService: service } = require('./services/passkeyService');
+      return service;
+    } catch (error) {
+      console.warn('[App] Passkey service not available:', error);
+      return null;
+    }
+  }, []);
+
   // Check if passkey is available
   const checkPasskeyAvailable = useCallback(async (): Promise<boolean> => {
+    if (!passkeyService) return false;
+    
     try {
-      // Check if WebAuthn is supported
-      if (!window.PublicKeyCredential || !navigator.credentials) {
-        return false;
+      // Check if passkey is enabled
+      if (passkeyService.isPasskeyEnabled()) {
+        const passkeyData = await passkeyService.getStoredPasskeyData();
+        return passkeyData !== null;
       }
-      
-      // Check if passkey data exists in storage (similar to xyz-wallet)
-      const passkeyData = localStorage.getItem('passkey_credential') || localStorage.getItem('xyz_passkey_data');
-      if (passkeyData) {
-        return true;
-      }
-      
-      // Check if platform authenticator is available
-      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      return available;
+      return false;
     } catch (error) {
       console.warn('[App] Passkey availability check failed:', error);
       return false;
     }
-  }, []);
+  }, [passkeyService]);
 
   // Handle deposit approval - supports both wallet signing (default) and passkey (optional)
   const handleApproveDeposit = useCallback(async (deposit: PendingDepositAction) => {
@@ -1595,10 +1602,116 @@ const App: React.FC = () => {
       // Otherwise, use wallet signing (simpler, no setup required)
       const hasPasskey = await checkPasskeyAvailable();
       
-      if (hasPasskey) {
-        // TODO: Implement passkey-based deposit execution
-        // For now, fall through to wallet signing
-        console.log('[App] Passkey available but not yet implemented, using wallet signing');
+      if (hasPasskey && passkeyService) {
+        // Use passkey-based deposit execution (WebAuthn method)
+        try {
+          setNotificationState({
+            isOpen: true,
+            title: 'Executing Deposit',
+            message: 'Preparing deposit with passkey...',
+            type: 'info',
+            autoClose: 0,
+          });
+
+          // Get passkey credential
+          const passkeyData = await passkeyService.getStoredPasskeyData();
+          if (!passkeyData) {
+            throw new Error('Passkey data not found');
+          }
+
+          // Create GeoLink deposit service
+          const { GeoLinkDepositService } = await import('./services/geoLinkDepositService');
+          const depositService = new GeoLinkDepositService(
+            process.env.REACT_APP_GEOLINK_WALLET_PROVIDER_KEY || ''
+          );
+
+          // Create ContractCallIntent
+          const network = process.env.REACT_APP_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet';
+          const intent = depositService.createContractCallIntent(deposit, network);
+
+          // Encode intent to bytes
+          const intentBytes = depositService.encodeIntentToBytes(intent);
+          const signaturePayload = btoa(Array.from(intentBytes, byte => String.fromCharCode(byte)).join(''));
+
+          // Generate WebAuthn challenge
+          const challenge = await depositService.generateChallenge(intentBytes);
+
+          // Authenticate with passkey
+          setNotificationState({
+            isOpen: true,
+            title: 'Authenticate',
+            message: 'Please authenticate with your passkey...',
+            type: 'info',
+            autoClose: 0,
+          });
+
+          const authResult = await passkeyService.authenticatePasskey(passkeyData.id, challenge);
+
+          // Get passkey public key SPKI
+          const passkeyPublicKeySPKI = await passkeyService.getPasskeyPublicKeySPKI(passkeyData.id);
+
+          // Note: For passkey method, we need the user's secret key
+          // In xyz-wallet, this is decrypted from encrypted storage using passkey
+          // For GeoTrust, we'll get it from the wallet if available
+          // This is a simplified version - full implementation would decrypt from encrypted storage
+          let userSecretKey = '';
+          try {
+            // Try to get secret key from wallet (if available)
+            // Note: This may not work with all wallet types
+            if (wallet && typeof (wallet as any).getSecretKey === 'function') {
+              userSecretKey = await (wallet as any).getSecretKey();
+            }
+          } catch (error) {
+            console.warn('[App] Could not get secret key from wallet:', error);
+          }
+
+          if (!userSecretKey) {
+            // Fall back to wallet signing if we can't get secret key
+            console.log('[App] Secret key not available, falling back to wallet signing');
+            throw new Error('Secret key required for passkey deposit execution');
+          }
+
+          // Execute deposit via GeoLink
+          setNotificationState({
+            isOpen: true,
+            title: 'Executing Deposit',
+            message: 'Submitting deposit transaction...',
+            type: 'info',
+            autoClose: 0,
+          });
+
+          const result = await depositService.executeDeposit(
+            deposit.id,
+            walletAddress,
+            userSecretKey,
+            passkeyPublicKeySPKI,
+            authResult.signature,
+            authResult.authenticatorData,
+            authResult.clientDataJSON,
+            signaturePayload
+          );
+
+          if (result.success) {
+            setNotificationState({
+              isOpen: true,
+              title: 'Success',
+              message: `Deposit executed successfully!${result.transaction_hash ? ` Transaction: ${result.transaction_hash.slice(0, 8)}...` : ''}`,
+              type: 'success',
+              autoClose: 5000,
+            });
+
+            // Refresh pending deposits
+            const updatedDeposits = await geolinkApi.getPendingDeposits(walletAddress);
+            setPendingDeposits(updatedDeposits);
+            return;
+          } else {
+            throw new Error(result.error || 'Deposit execution failed');
+          }
+        } catch (error: any) {
+          console.error('[App] Passkey deposit execution failed:', error);
+          // Fall through to wallet signing as fallback
+          console.log('[App] Falling back to wallet signing');
+        }
       }
 
       // Use wallet signing method (default)
@@ -1751,7 +1864,7 @@ const App: React.FC = () => {
         autoClose: 5000,
       });
     }
-  }, [wallet, walletAddress, contractClient, checkPasskeyAvailable]);
+  }, [wallet, walletAddress, contractClient, checkPasskeyAvailable, passkeyService]);
 
   // Handle deposit decline
   const handleDeclineDeposit = useCallback(async (deposit: PendingDepositAction) => {
@@ -2847,6 +2960,8 @@ const App: React.FC = () => {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const autoCheckIn = async () => {
     if (!navigator.geolocation || !contractClient) return;
     
@@ -4271,6 +4386,22 @@ const App: React.FC = () => {
                   />
                 )}
 
+                {/* Passkey Setup Prompt */}
+                {walletAddress && passkeyService && !passkeyService.isPasskeyEnabled() && (
+                  <div style={{ marginTop: '15px', padding: '15px', backgroundColor: 'rgba(255, 215, 0, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 215, 0, 0.3)' }}>
+                    <p style={{ margin: '0 0 10px 0', color: '#FFD700', fontSize: '0.9em' }}>
+                      🔐 Enable passkey authentication for enhanced security and auto-execute deposits
+                    </p>
+                    <button 
+                      className="primary-button" 
+                      onClick={() => setShowPasskeySetupModal(true)}
+                      style={{ width: '100%' }}
+                    >
+                      Set Up Passkey
+                    </button>
+                  </div>
+                )}
+
                 {/* Show user's current session if connected */}
                 {userCurrentSession !== null && (
                   <CollapsiblePanel
@@ -4917,6 +5048,17 @@ const App: React.FC = () => {
         />
       )}
       
+      {/* Passkey Setup Modal */}
+      <PasskeySetupModal
+        isOpen={showPasskeySetupModal}
+        onClose={() => setShowPasskeySetupModal(false)}
+        onPasskeyEnabled={(credentialId) => {
+          console.log('[App] Passkey enabled:', credentialId);
+          setShowPasskeySetupModal(false);
+        }}
+        publicKey={walletAddress || ''}
+      />
+
       {/* Country Profile Overlay (for non-admins) */}
       {showCountryProfileOverlay && selectedCountry && contractClient && (
         <CountryProfileOverlay
