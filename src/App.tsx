@@ -2477,13 +2477,15 @@ const App: React.FC = () => {
     if (wallet && contractClient && !playerLocation && !isCheckingIn && !hasCheckedIn.current && 
         userCurrentSession === null && pendingSessionJoin === null) {
       // Wait a bit for active sessions to load before auto-checkin
-      const timer = setTimeout(() => {
-        if (userCurrentSession === null && pendingSessionJoin === null) {
-          hasCheckedIn.current = true;
-          autoCheckIn();
-        }
-      }, 2000);
-      return () => clearTimeout(timer);
+      // Only auto-checkin if user explicitly wants to join (not on every wallet connection)
+      // Remove auto-checkin on wallet connect - user should manually click "Share Location" or join a session
+      // const timer = setTimeout(() => {
+      //   if (userCurrentSession === null && pendingSessionJoin === null) {
+      //     hasCheckedIn.current = true;
+      //     autoCheckIn();
+      //   }
+      // }, 2000);
+      // return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet, contractClient, userCurrentSession, pendingSessionJoin]);
