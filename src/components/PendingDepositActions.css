@@ -1,8 +1,8 @@
 .pending-deposits-panel {
-  background-color: #3a3f47;
+  background-color: #fff;
   border-radius: 8px;
   padding: 0;
-  border: 1px solid #555;
+  border: 1px solid #ddd;
 }
 
 .pending-deposits-list {
@@ -19,29 +19,29 @@
 }
 
 .pending-deposits-list::-webkit-scrollbar-track {
-  background: #2a2a2a;
+  background: #f0f0f0;
   border-radius: 4px;
 }
 
 .pending-deposits-list::-webkit-scrollbar-thumb {
-  background: #555;
+  background: #ccc;
   border-radius: 4px;
 }
 
 .pending-deposits-list::-webkit-scrollbar-thumb:hover {
-  background: #666;
+  background: #aaa;
 }
 
 .no-deposits {
   padding: 20px;
   text-align: center;
-  color: #aaa;
+  color: #666;
   font-style: italic;
 }
 
 .deposit-list-item {
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
   border-radius: 8px;
   padding: 16px;
   cursor: pointer;
@@ -49,9 +49,10 @@
 }
 
 .deposit-list-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 215, 0, 0.3);
+  background-color: #f0f0f0;
+  border-color: #FFD700;
   transform: translateX(2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .deposit-list-item-header {
@@ -66,7 +67,7 @@
 }
 
 .deposit-list-item-title strong {
-  color: #fff;
+  color: #333;
   font-size: 0.95em;
   flex: 1;
   overflow: hidden;
@@ -100,6 +101,6 @@
 }
 
 .deposit-expiration {
-  color: #aaa;
+  color: #666;
   font-size: 0.9em;
 }

@@ -119,7 +119,7 @@ export const PendingDepositActions: React.FC<PendingDepositActionsProps> = ({
         minimized={minimized}
         onToggleMinimize={() => setMinimized(!minimized)}
         className="pending-deposits-panel"
-        style={{ marginTop: '8px' }}
+        style={{ marginTop: '8px', backgroundColor: '#fff', color: '#000' }}
       >
         <div className="pending-deposits-list">
           {pendingDeposits.length === 0 ? (
