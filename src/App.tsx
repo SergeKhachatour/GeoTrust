@@ -1337,6 +1337,30 @@ const App: React.FC = () => {
       setActiveSessions(sessions);
       console.log(`[App] Active sessions: ${sessions.length} (checked ${sessionIdsArray.length} IDs)`);
       
+      // If user's current session is no longer in active list, check if it's ended
+      if (userCurrentSession) {
+        const currentSessionInList = sessions.find(s => s.sessionId === userCurrentSession);
+        if (!currentSessionInList) {
+          // Session is no longer in active list (ended or doesn't exist)
+          // Double-check by querying contract
+          try {
+            if (readOnlyClient) {
+              const contractSession = await readOnlyClient.getSession(userCurrentSession);
+              if (!contractSession || contractSession.state === 'Ended') {
+                console.log('[App] User session', userCurrentSession, 'is ended, clearing');
+                setUserCurrentSession(null);
+                setSessionLink('');
+              }
+            }
+          } catch (error) {
+            // Session doesn't exist, clear it
+            console.log('[App] User session', userCurrentSession, 'not found, clearing');
+            setUserCurrentSession(null);
+            setSessionLink('');
+          }
+        }
+      }
+      
       // Update markers on map from active sessions (even without wallet)
       if (map.current && map.current.loaded()) {
         updateSessionMarkers(sessions);
