@@ -14,15 +14,15 @@
 .pending-deposit-overlay-modal {
   background-color: #282c34;
   color: #fff;
-  border-radius: 10px;
-  padding: 25px;
+  border-radius: 12px;
+  padding: 30px;
   width: 90%;
-  max-width: 600px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  max-width: 650px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  border: 1px solid #444;
+  gap: 20px;
+  border: 1px solid #555;
   max-height: 90vh;
   overflow-y: auto;
 }
@@ -31,9 +31,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #444;
-  padding-bottom: 15px;
-  margin-bottom: 15px;
+  border-bottom: 2px solid #555;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
 }
 
 .pending-deposit-overlay-header h2 {
@@ -58,13 +58,17 @@
 .pending-deposit-overlay-body {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 20px;
 }
 
 .deposit-detail-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  background-color: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .deposit-detail-section h3 {
@@ -75,10 +79,11 @@
 
 .deposit-detail-row {
   display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  grid-template-columns: 140px 1fr;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  align-items: start;
 }
 
 .deposit-detail-row:last-child {
@@ -86,13 +91,15 @@
 }
 
 .deposit-detail-row label {
-  color: #aaa;
-  font-weight: 500;
+  color: #ccc;
+  font-weight: 600;
+  font-size: 0.95em;
 }
 
 .deposit-detail-row span {
   color: #fff;
   word-break: break-word;
+  line-height: 1.5;
 }
 
 .deposit-amount {
@@ -113,10 +120,10 @@
 .pending-deposit-overlay-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  padding-top: 15px;
-  border-top: 1px solid #444;
-  margin-top: 15px;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 2px solid #555;
+  margin-top: 20px;
 }
 
 .pending-deposit-overlay-footer .primary-button {

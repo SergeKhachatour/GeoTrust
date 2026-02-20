@@ -124,19 +124,21 @@ export const PendingDepositOverlay: React.FC<PendingDepositOverlayProps> = ({
               <label>Received At:</label>
               <span>{new Date(deposit.received_at).toLocaleString()}</span>
             </div>
-            
-            {Object.keys(deposit.parameters).length > 0 && (
-              <div className="deposit-detail-section">
-                <h3>Parameters</h3>
-                {Object.entries(deposit.parameters).map(([key, value]) => (
+          </div>
+          
+          {Object.keys(deposit.parameters).length > 2 && (
+            <div className="deposit-detail-section">
+              <h3>Additional Parameters</h3>
+              {Object.entries(deposit.parameters)
+                .filter(([key]) => key !== 'amount' && key !== 'asset' && key !== 'user_address')
+                .map(([key, value]) => (
                   <div key={key} className="deposit-detail-row">
                     <label>{key}:</label>
                     <span>{String(value)}</span>
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         
         {deposit.status === 'pending' && (

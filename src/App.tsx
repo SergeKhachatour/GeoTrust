@@ -1767,9 +1767,24 @@ const App: React.FC = () => {
       }
 
       // Convert parameters to ScVal
-      const { Address, nativeToScVal, TransactionBuilder, BASE_FEE, Networks } = await import('@stellar/stellar-sdk');
+      const { Address, nativeToScVal, TransactionBuilder, BASE_FEE, Networks, xdr } = await import('@stellar/stellar-sdk');
       const userAddressScVal = new Address(userAddress).toScVal();
-      const assetScVal = new Address(asset).toScVal(); // Assuming asset is an address
+      
+      // Handle native XLM vs other assets
+      let assetScVal;
+      if (asset === 'XLM' || asset === 'native' || !asset || asset.trim() === '') {
+        // Native XLM - use void ScVal or special handling
+        assetScVal = xdr.ScVal.scvVoid();
+      } else {
+        // Other asset - treat as contract address
+        try {
+          assetScVal = new Address(asset).toScVal();
+        } catch (error) {
+          // If it's not a valid address, try as native XLM
+          console.warn('[App] Asset is not a valid address, treating as native XLM:', asset);
+          assetScVal = xdr.ScVal.scvVoid();
+        }
+      }
       
       // Convert amount to i128 using nativeToScVal
       // nativeToScVal can handle numbers and will convert to appropriate ScVal type
@@ -1934,22 +1949,29 @@ const App: React.FC = () => {
         const deposits = await geolinkApi.getPendingDeposits(walletAddress);
         setPendingDeposits(deposits);
         
-        // Auto-execute deposits if auto_execute is enabled
-        // With wallet signing, we can auto-execute even without passkey
+        // Auto-execute deposits if auto_execute is enabled AND user has passkey
+        // Disable auto-execution for now - user must manually approve deposits
+        // This prevents unwanted transaction prompts
+        /*
         for (const deposit of deposits) {
           if (deposit.status === 'pending') {
             // Check if contract has auto_execute enabled
             const contract = nearbyContracts.find(c => c.id === deposit.contract_id);
             if (contract?.auto_execute) {
-              console.log('[App] Auto-executing deposit:', deposit.id);
-              try {
-                await handleApproveDeposit(deposit);
-              } catch (error) {
-                console.error('[App] Failed to auto-execute deposit:', error);
+              const hasPasskey = await checkPasskeyAvailable();
+              // Only auto-execute if passkey is available (for security)
+              if (hasPasskey) {
+                console.log('[App] Auto-executing deposit with passkey:', deposit.id);
+                try {
+                  await handleApproveDeposit(deposit);
+                } catch (error) {
+                  console.error('[App] Failed to auto-execute deposit:', error);
+                }
               }
             }
           }
         }
+        */
       } catch (error) {
         console.warn('[App] Failed to fetch pending deposits:', error);
       }
