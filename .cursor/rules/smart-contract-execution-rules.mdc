@@ -1,0 +1,183 @@
+---
+description: Smart contract execution rules and deposit system for GeoTrust
+globs: *.ts,*.tsx,*.rs
+---
+
+# Smart Contract Execution Rules and Deposit System
+
+## Overview
+
+Smart contracts in GeoTrust have **two critical implications** for users:
+
+1. **Execution Rules**: Contracts can define location-based rules that trigger actions when users enter their radius
+2. **Pending Deposits**: When a user's location satisfies a contract's execution rule, GeoLink creates pending deposit actions that can be auto-executed or require user approval
+
+## Key Concepts
+
+### Execution Rules
+
+Execution rules are conditions that must be satisfied for a contract function to execute. These can include:
+- **Location-based**: User must be within contract's `radius_meters`
+- **Time-based**: `trigger_on` conditions (e.g., specific times, dates)
+- **Distance-based**: User must be within a certain distance
+- **Custom rules**: Defined by `rule_name` and contract-specific logic
+
+### Pending Deposit Actions
+
+When a user's location satisfies a contract's execution rule:
+1. GeoLink monitors user location updates (sent every 10 seconds)
+2. GeoLink creates a `PendingDepositAction` with status `'pending'`
+3. The app polls GeoLink every 30 seconds for pending deposits
+4. User can approve/decline or auto-execute if `auto_execute: true`
+
+## Contract Data Structure
+
+Contracts from GeoLink include:
+
+```typescript
+interface Contract {
+  id: number;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  contract_name: string;
+  contract_address: string;
+  function_name: string; // Usually "deposit" for deposits
+  function_mappings: {
+    [functionName: string]: {
+      user_address?: string;
+      asset?: string;
+      amount?: string;
+      [key: string]: any;
+    };
+  };
+  requires_webauthn: boolean;
+  use_smart_wallet: boolean;
+  auto_execute: boolean; // If true, executes automatically when rule satisfied
+  network: 'testnet' | 'mainnet';
+  rule_name?: string; // Name of execution rule
+  trigger_on?: string; // Trigger conditions
+  distance?: number; // Distance from user location
+}
+```
+
+## Pending Deposit Action Structure
+
+```typescript
+interface PendingDepositAction {
+  id: string;
+  rule_id: number;
+  rule_name: string;
+  contract_id: number;
+  contract_name: string;
+  contract_address: string;
+  function_name: string; // Usually "deposit"
+  matched_public_key: string; // User's public key that matched
+  update_id: number;
+  received_at: string;
+  parameters: {
+    user_address?: string;
+    asset?: string;
+    amount?: string;
+    [key: string]: any;
+  };
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
+  expires_at: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+}
+```
+
+## GeoLink API Integration
+
+### Required Endpoints
+
+**Data Consumer API** (for fetching contracts):
+- `GET /api/contracts/nearby?latitude={lat}&longitude={lng}&radius={radius}`
+- Uses `X-API-Key` header with `REACT_APP_GEOLINK_DATA_CONSUMER_KEY`
+
+**Wallet Provider API** (for deposit operations):
+- `GET /api/contracts/rules/pending/deposits?public_key={publicKey}` - Get pending deposits
+- `GET /api/contracts/rules/pending/deposits/{actionId}` - Get deposit details
+- `POST /api/contracts/rules/pending/deposits/{actionId}/execute` - Execute deposit
+- `POST /api/contracts/rules/pending/deposits/{actionId}/cancel` - Cancel deposit
+- Uses `X-API-Key` header with `REACT_APP_GEOLINK_WALLET_PROVIDER_KEY`
+
+### Location Updates
+
+User location must be sent to GeoLink every 10 seconds via Wallet Provider API:
+- `POST /api/location/update` with user's current latitude/longitude
+- GeoLink monitors these updates and creates pending deposits when rules are satisfied
+
+## Implementation Requirements
+
+### 1. Contract Marker Display
+
+- Display contracts as markers on map (already implemented)
+- Show execution radius as circle around marker
+- Display `auto_execute` status visually
+- Show `rule_name` if available
+
+### 2. Pending Deposit Polling
+
+- Poll `GET /api/contracts/rules/pending/deposits` every 30 seconds
+- Display pending deposits in a dedicated UI component
+- Show deposit details: amount, asset, contract name, expiration, location
+- Color-code by status (pending = gold, completed = green, failed = red)
+
+### 3. Deposit Execution Flow
+
+When user approves a deposit:
+
+1. **Decrypt Secret Key**: Use passkey to decrypt wallet secret key
+2. **Create ContractCallIntent**: Build intent with contract details, function, parameters
+3. **Encode Intent**: Convert to canonical JSON bytes, base64 encode
+4. **Generate WebAuthn Challenge**: SHA-256 hash of intent bytes (first 32 bytes)
+5. **Authenticate with Passkey**: Sign challenge using WebAuthn API
+6. **Execute via GeoLink**: POST to `/api/contracts/rules/pending/deposits/{actionId}/execute` with:
+   - `public_key`: User's Stellar public key
+   - `user_secret_key`: Decrypted secret key
+   - `webauthn_signature`: Passkey signature
+   - `webauthn_authenticator_data`: Authenticator data
+   - `webauthn_client_data`: Client data JSON
+   - `signature_payload`: Base64-encoded intent bytes
+   - `passkey_public_key_spki`: Passkey public key in SPKI format
+
+### 4. Auto-Execute Support
+
+If `auto_execute: true`:
+- Automatically execute deposit when pending action is detected
+- Still requires WebAuthn authentication
+- Show notification to user that deposit was auto-executed
+
+### 5. Country Policy Integration
+
+Country admins should be able to control:
+- `allow_smart_contracts`: Whether contracts are displayed on map
+- `allow_auto_execute`: Whether auto-execute is allowed for contracts in their country
+- `allow_deposits`: Whether deposits are allowed from contracts in their country
+
+## Key Files to Reference
+
+- `src/geolinkApi.ts` - GeoLink API integration
+- `src/App.tsx` - Main app component, contract marker rendering
+- `src/contract.ts` - Contract client for executing functions
+- `contracts/geotrust-match/src/lib.rs` - Smart contract implementation
+
+## Environment Variables Required
+
+- `REACT_APP_GEOLINK_API_URL`: GeoLink API base URL
+- `REACT_APP_GEOLINK_DATA_CONSUMER_KEY`: For fetching contracts
+- `REACT_APP_GEOLINK_WALLET_PROVIDER_KEY`: For deposit operations
+- `REACT_APP_STELLAR_NETWORK`: 'testnet' or 'mainnet'
+
+## Important Notes
+
+1. **Location Updates**: Must send location to GeoLink every 10 seconds for execution rules to work
+2. **WebAuthn Required**: All deposits require passkey authentication for security
+3. **Secret Key Management**: Secret keys should be encrypted with passkey when possible
+4. **Polling Frequency**: Poll pending deposits every 30 seconds
+5. **Auto-Execute**: Only works if `auto_execute: true` and user has approved auto-execution
+6. **Country Policies**: Execution rules should respect country-specific policies set by admins

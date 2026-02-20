@@ -51,6 +51,18 @@ export interface NearbyContract {
   distance: number;
   description?: string;
   functions?: any[];
+  // Execution rule fields
+  radius_meters?: number;
+  function_name?: string;
+  function_mappings?: {
+    [functionName: string]: any;
+  };
+  requires_webauthn?: boolean;
+  use_smart_wallet?: boolean;
+  auto_execute?: boolean;
+  network?: 'testnet' | 'mainnet';
+  rule_name?: string;
+  trigger_on?: string;
 }
 
 export interface SessionData {
@@ -509,6 +521,134 @@ class GeoLinkApiClient {
       body: JSON.stringify(ruleData),
     });
   }
+
+  /**
+   * Get pending deposit actions for a user (uses Wallet Provider key)
+   * GeoLink creates these when user location satisfies contract execution rules
+   */
+  async getPendingDeposits(publicKey: string): Promise<PendingDepositAction[]> {
+    if (!this.walletProviderKey) {
+      console.warn('[GeoLinkAPI] Wallet Provider API key not configured, cannot fetch pending deposits');
+      return [];
+    }
+    
+    try {
+      const response = await this.request<{ deposits?: PendingDepositAction[]; pending_deposits?: PendingDepositAction[] }>(
+        `/api/contracts/rules/pending/deposits?public_key=${publicKey}`,
+        {},
+        true // Use wallet provider key
+      );
+      return response.deposits || response.pending_deposits || [];
+    } catch (error: any) {
+      // If endpoint doesn't exist (404) or has missing parameters (400), return empty array
+      if (
+        error.message?.includes('404') || 
+        error.message?.includes('not found') ||
+        error.message?.includes('400') ||
+        error.message?.includes('Missing required parameters') ||
+        error.message?.includes('Bad Request')
+      ) {
+        console.log('[GeoLinkAPI] Pending deposits endpoint not available or requires different parameters');
+        return [];
+      }
+      console.warn('[GeoLinkAPI] Failed to get pending deposits:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get pending deposit action details (uses Wallet Provider key)
+   */
+  async getPendingDepositDetails(actionId: string): Promise<PendingDepositAction | null> {
+    if (!this.walletProviderKey) {
+      throw new Error('Wallet Provider API key is not configured');
+    }
+    
+    try {
+      return await this.request<PendingDepositAction>(
+        `/api/contracts/rules/pending/deposits/${actionId}`,
+        {},
+        true // Use wallet provider key
+      );
+    } catch (error) {
+      console.warn(`[GeoLinkAPI] Failed to get deposit details for ${actionId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Execute a pending deposit action (uses Wallet Provider key)
+   * Requires WebAuthn authentication and secret key
+   */
+  async executePendingDeposit(actionId: string, executionData: {
+    public_key: string;
+    user_secret_key: string;
+    webauthn_signature: string;
+    webauthn_authenticator_data: string;
+    webauthn_client_data: string;
+    signature_payload: string;
+    passkey_public_key_spki: string;
+  }): Promise<any> {
+    if (!this.walletProviderKey) {
+      throw new Error('Wallet Provider API key is not configured');
+    }
+    
+    return this.request(
+      `/api/contracts/rules/pending/deposits/${actionId}/execute`,
+      {
+        method: 'POST',
+        body: JSON.stringify(executionData),
+      },
+      true // Use wallet provider key
+    );
+  }
+
+  /**
+   * Cancel a pending deposit action (uses Wallet Provider key)
+   */
+  async cancelPendingDeposit(actionId: string, publicKey: string): Promise<any> {
+    if (!this.walletProviderKey) {
+      throw new Error('Wallet Provider API key is not configured');
+    }
+    
+    return this.request(
+      `/api/contracts/rules/pending/deposits/${actionId}/cancel`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ public_key: publicKey }),
+      },
+      true // Use wallet provider key
+    );
+  }
+}
+
+/**
+ * Pending Deposit Action interface
+ * Created by GeoLink when user location satisfies contract execution rules
+ */
+export interface PendingDepositAction {
+  id: string;
+  rule_id: number;
+  rule_name: string;
+  contract_id: number;
+  contract_name: string;
+  contract_address: string;
+  function_name: string; // Usually "deposit"
+  matched_public_key: string; // User's public key that matched
+  update_id: number;
+  received_at: string;
+  parameters: {
+    user_address?: string;
+    asset?: string;
+    amount?: string;
+    [key: string]: any;
+  };
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
+  expires_at: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
 }
 
 export const geolinkApi = new GeoLinkApiClient();
