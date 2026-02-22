@@ -402,9 +402,9 @@ export const ExecutionRuleManager: React.FC<ExecutionRuleManagerProps> = ({ wall
                   <div className="rule-info">
                     <strong>Function:</strong> {rule.function_name}
                   </div>
-                  {rule.center_latitude && rule.center_longitude && (
+                  {rule.center_latitude != null && rule.center_longitude != null && (
                     <div className="rule-info">
-                      <strong>Location:</strong> {rule.center_latitude.toFixed(4)}, {rule.center_longitude.toFixed(4)}
+                      <strong>Location:</strong> {Number(rule.center_latitude).toFixed(4)}, {Number(rule.center_longitude).toFixed(4)}
                     </div>
                   )}
                   {rule.radius_meters && (

@@ -63,7 +63,11 @@ div[role="dialog"][class*="wallet"] {
     padding: 16px !important;
     max-height: calc(100vh - 32px) !important;
     overflow-y: auto !important;
-    height: 100% !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
   
   .swk-wallet-list,
@@ -85,5 +89,66 @@ div[role="dialog"][class*="wallet"] {
     font-size: 16px !important;
     min-height: 60px !important;
     width: 100% !important;
+  }
+  
+  /* Ensure info/help sections are visible and scrollable */
+  [class*="swk-info"],
+  [class*="swk-help"],
+  [class*="swk-learn"],
+  [class*="info-section"],
+  [class*="help-section"],
+  [class*="learn-more"],
+  div[class*="info"],
+  div[class*="help"],
+  section[class*="info"],
+  section[class*="help"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 16px !important;
+    margin: 16px 0 !important;
+  }
+  
+  /* Ensure all content within modal is scrollable */
+  .swk-modal-content > *,
+  [class*="swk-modal-content"] > *,
+  [class*="modal-content"] > * {
+    max-height: none !important;
+  }
+  
+  /* Make sure the modal body/content wrapper allows scrolling */
+  [class*="swk-modal-body"],
+  [class*="modal-body"],
+  [class*="wallet-modal-body"],
+  .swk-modal > div,
+  [class*="swk-modal"] > div {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    max-height: calc(100vh - 80px) !important;
+    padding-bottom: 40px !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* Ensure all text content and info sections within wallet modal are visible */
+  .swk-modal p,
+  .swk-modal div,
+  .swk-modal section,
+  [class*="swk-modal"] p,
+  [class*="swk-modal"] div,
+  [class*="swk-modal"] section {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Specifically target collapsed or hidden content within wallet modal */
+  .swk-modal [class*="collapsed"],
+  .swk-modal [class*="hidden"],
+  [class*="swk-modal"] [class*="collapsed"],
+  [class*="swk-modal"] [class*="hidden"] {
+    display: block !important;
+    visibility: visible !important;
   }
 }
