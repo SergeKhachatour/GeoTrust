@@ -6,6 +6,24 @@
   overflow: hidden;
 }
 
+/* Fix Mapbox controls positioning on mobile */
+.mapboxgl-ctrl-top-left {
+  top: 70px !important;
+  left: 20px !important;
+}
+
+@media (max-width: 768px) {
+  .mapboxgl-ctrl-top-left {
+    top: 60px !important;
+    left: 10px !important;
+  }
+  
+  /* Ensure controls are visible and not cut off */
+  .mapboxgl-ctrl-group {
+    margin-bottom: 8px;
+  }
+}
+
 .map-container {
   width: 100% !important;
   height: 100% !important;

@@ -5,9 +5,7 @@ import './App.css';
 import { Wallet } from './wallet';
 import { ContractClient } from './contract';
 import { ReadOnlyContractClient } from './contract-readonly';
-import { AdminPanel } from './AdminPanel';
 import { GamePanel } from './GamePanel';
-import { CollapsiblePanel } from './CollapsiblePanel';
 import { ConfirmationOverlay } from './ConfirmationOverlay';
 import { NotificationOverlay } from './NotificationOverlay';
 import { SessionDetailsOverlay } from './SessionDetailsOverlay';
@@ -16,10 +14,13 @@ import { CountryProfileOverlay } from './CountryProfileOverlay';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 import { Horizon } from '@stellar/stellar-sdk';
 import { geolinkApi, NearbyNFT, NearbyContract, PendingDepositAction } from './services/geolinkApi';
-import { PendingDepositActions } from './components/PendingDepositActions';
 import { PasskeySetupModal } from './components/PasskeySetupModal';
-import { CombinedSessionsPanel } from './components/CombinedSessionsPanel';
-import { ContractExplorer } from './components/ContractExplorer';
+import { NavigationMenu } from './components/NavigationMenu';
+import { SettingsOverlay } from './components/SettingsOverlay';
+import { SmartContractsOverlay } from './components/SmartContractsOverlay';
+import { AdminOverlay } from './components/AdminOverlay';
+import { SessionsOverlay } from './components/SessionsOverlay';
+import { PendingDepositsOverlay } from './components/PendingDepositsOverlay';
 
 // Helper function to construct NFT image URL (matching xyz-wallet exactly)
 function cleanServerUrl(serverUrl: string | null | undefined): string | null {
@@ -216,6 +217,7 @@ const App: React.FC = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapZoom, setMapZoom] = useState<number>(2); // Track map zoom level
+  const [showSettings, setShowSettings] = useState(false);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [contractClient, setContractClient] = useState<ContractClient | null>(null);
   // Initialize isAdmin from localStorage if available (for XDR error cases)
@@ -270,11 +272,9 @@ const App: React.FC = () => {
   // Track sessions that the user has explicitly ended (so we don't re-add them)
   const endedSessionsRef = useRef<Set<number>>(new Set());
   const [gamePanelMinimized, setGamePanelMinimized] = useState(false);
-  const [yourSessionMinimized, setYourSessionMinimized] = useState(false);
-  const [adminPanelMinimized, setAdminPanelMinimized] = useState(false);
-  const [nftPanelMinimized, setNftPanelMinimized] = useState(false);
-  const [contractPanelMinimized, setContractPanelMinimized] = useState(false);
-  const [contractExplorerMinimized, setContractExplorerMinimized] = useState(false);
+  
+  // Navigation and overlay states
+  const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
   
   // Confirmation and notification overlay states
   const [confirmationState, setConfirmationState] = useState<{
@@ -322,10 +322,6 @@ const App: React.FC = () => {
   
   // Map settings state
   const [mapStyle, setMapStyle] = useState<string>('mapbox://styles/mapbox/light-v11');
-  const [showMapSettings, setShowMapSettings] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [mapFilters, setMapFilters] = useState({
     showUsers: true,
     showNFTs: true,
@@ -333,9 +329,9 @@ const App: React.FC = () => {
   });
   
   // 3D controls state
-  const [enable3D, setEnable3D] = useState(false);
-  const [pitch, setPitch] = useState(0);
-  const [bearing, setBearing] = useState(0);
+  const [enable3D, setEnable3D] = useState(true);
+  const [pitch] = useState(0); // Read-only: SettingsOverlay manages pitch directly on map
+  const [bearing] = useState(0); // Read-only: SettingsOverlay manages bearing directly on map
   const [showBuildings, setShowBuildings] = useState(false);
   const [showTerrain, setShowTerrain] = useState(false);
   
@@ -835,15 +831,15 @@ const App: React.FC = () => {
         reloadCountryData();
       });
       
-      // Add Navigation Control (zoom in/out) - position below search/settings
+      // Add Navigation Control (zoom in/out) - position top-left, below search
       const navControl = new mapboxgl.NavigationControl({
         showCompass: true,
         showZoom: true,
         visualizePitch: true
       });
-      map.current.addControl(navControl, 'bottom-right');
+      map.current.addControl(navControl, 'top-left');
       
-      // Add Geolocate Control (my location) - position below navigation control
+      // Add Geolocate Control (my location) - position top-left, below navigation control
       const geolocateControl = new mapboxgl.GeolocateControl({
         positionOptions: {
           enableHighAccuracy: true
@@ -851,7 +847,7 @@ const App: React.FC = () => {
         trackUserLocation: true,
         showUserHeading: true
       });
-      map.current.addControl(geolocateControl, 'bottom-right');
+      map.current.addControl(geolocateControl, 'top-left');
       
       // Add country click handler
       const handleCountryClick = async (e: mapboxgl.MapMouseEvent) => {
@@ -3846,365 +3842,7 @@ const App: React.FC = () => {
         </div>
       )}
       
-      {/* Map Settings Controller - Top Right */}
-      <div style={{
-        position: 'absolute',
-        top: '16px',
-        right: '16px',
-        zIndex: 1000,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-        alignItems: 'flex-end'
-      }}>
-        {/* Search Button */}
-        <button
-          onClick={() => setShowSearch(!showSearch)}
-          style={{
-            backgroundColor: 'white',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            padding: '8px 12px',
-            cursor: 'pointer',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-          title="Search Location"
-        >
-          🔍 Search
-        </button>
-        
-        {/* Settings Button */}
-        <button
-          onClick={() => setShowMapSettings(!showMapSettings)}
-          style={{
-            backgroundColor: 'white',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            padding: '8px 12px',
-            cursor: 'pointer',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-          title="Map Settings"
-        >
-          ⚙️ Settings
-        </button>
-        
-        {/* Search Panel */}
-        {showSearch && (
-          <div style={{
-            backgroundColor: 'white',
-            border: '1px solid #ccc',
-            borderRadius: '8px',
-            padding: '12px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            minWidth: '300px',
-            maxWidth: '400px'
-          }}>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  // Debounce search
-                  if (markerUpdateTimeoutRef.current) {
-                    clearTimeout(markerUpdateTimeoutRef.current);
-                  }
-                  markerUpdateTimeoutRef.current = setTimeout(async () => {
-                    if (e.target.value.length > 2) {
-                      try {
-                        const response = await fetch(
-                          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(e.target.value)}.json?access_token=${mapboxgl.accessToken}&limit=5`
-                        );
-                        const data = await response.json();
-                        setSearchResults(data.features || []);
-                      } catch (error) {
-                        console.error('Search error:', error);
-                        setSearchResults([]);
-                      }
-                    } else {
-                      setSearchResults([]);
-                    }
-                  }, 300);
-                }}
-                placeholder="Search for a location..."
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                  fontSize: '14px'
-                }}
-              />
-              <button
-                onClick={() => {
-                  setShowSearch(false);
-                  setSearchQuery('');
-                  setSearchResults([]);
-                }}
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: '#f0f0f0',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                ✕
-              </button>
-            </div>
-            {searchResults.length > 0 && (
-              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {searchResults.map((result: any, idx: number) => (
-                  <div
-                    key={idx}
-                    onClick={() => {
-                      const [lng, lat] = result.center;
-                      if (map.current) {
-                        map.current.flyTo({
-                          center: [lng, lat],
-                          zoom: 12,
-                          duration: 1500
-                        });
-                      }
-                      setShowSearch(false);
-                      setSearchQuery('');
-                      setSearchResults([]);
-                    }}
-                    style={{
-                      padding: '8px',
-                      cursor: 'pointer',
-                      borderBottom: '1px solid #eee',
-                      fontSize: '13px'
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = '#f0f0f0';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = 'white';
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold' }}>{result.text}</div>
-                    <div style={{ fontSize: '11px', color: '#666' }}>{result.place_name}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Settings Panel */}
-        {showMapSettings && (
-          <div style={{
-            backgroundColor: 'white',
-            border: '1px solid #ccc',
-            borderRadius: '8px',
-            padding: '12px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            minWidth: '250px'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px' }}>Map Settings</h3>
-              <button
-                onClick={() => setShowMapSettings(false)}
-                style={{
-                  padding: '4px 8px',
-                  backgroundColor: '#f0f0f0',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                ✕
-              </button>
-            </div>
-            
-            {/* Map Style */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', fontWeight: 'bold' }}>Map Style:</label>
-              <select
-                value={mapStyle}
-                onChange={(e) => {
-                  const newStyle = e.target.value;
-                  setMapStyle(newStyle);
-                  if (map.current) {
-                    try {
-                      map.current.setStyle(newStyle);
-                    } catch (error) {
-                      console.error('[App] Error setting map style:', error);
-                      // Fallback to default style if error occurs
-                      const fallbackStyle = 'mapbox://styles/mapbox/light-v11';
-                      map.current.setStyle(fallbackStyle);
-                      setMapStyle(fallbackStyle);
-                    }
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  padding: '6px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                  fontSize: '13px'
-                }}
-              >
-                <option value="mapbox://styles/mapbox/satellite-streets-v12">Satellite Streets</option>
-                <option value="mapbox://styles/mapbox/streets-v12">Streets</option>
-                <option value="mapbox://styles/mapbox/outdoors-v12">Outdoors</option>
-                <option value="mapbox://styles/mapbox/light-v11">Light</option>
-                <option value="mapbox://styles/mapbox/dark-v11">Dark</option>
-              </select>
-            </div>
-            
-            {/* Filters */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold' }}>Show Markers:</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={mapFilters.showUsers}
-                    onChange={(e) => setMapFilters({ ...mapFilters, showUsers: e.target.checked })}
-                  />
-                  Users
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={mapFilters.showNFTs}
-                    onChange={(e) => setMapFilters({ ...mapFilters, showNFTs: e.target.checked })}
-                  />
-                  NFTs
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={mapFilters.showContracts}
-                    onChange={(e) => setMapFilters({ ...mapFilters, showContracts: e.target.checked })}
-                  />
-                  Smart Contracts
-                </label>
-              </div>
-            </div>
-            
-            {/* 3D Controls */}
-            <div style={{ marginBottom: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold' }}>3D Features:</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={enable3D}
-                    onChange={(e) => {
-                      setEnable3D(e.target.checked);
-                      if (map.current) {
-                        if (e.target.checked) {
-                          map.current.easeTo({ pitch: 60, bearing: 0, duration: 1000 });
-                          setPitch(60);
-                        } else {
-                          map.current.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
-                          setPitch(0);
-                        }
-                      }
-                    }}
-                  />
-                  Enable 3D View
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={showBuildings}
-                    onChange={(e) => {
-                      setShowBuildings(e.target.checked);
-                      if (map.current && map.current.isStyleLoaded()) {
-                        const style = map.current.getStyle();
-                        if (style && style.layers) {
-                          style.layers.forEach((layer: any) => {
-                            if (layer.id && layer.id.includes('building')) {
-                              try {
-                                map.current!.setLayoutProperty(layer.id, 'visibility', e.target.checked ? 'visible' : 'none');
-                              } catch (err) {
-                                // Layer might not exist in this style
-                              }
-                            }
-                          });
-                        }
-                      }
-                    }}
-                  />
-                  Show 3D Buildings
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={showTerrain}
-                    onChange={(e) => {
-                      setShowTerrain(e.target.checked);
-                      if (map.current && map.current.isStyleLoaded()) {
-                        try {
-                          if (e.target.checked) {
-                            map.current.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
-                          } else {
-                            map.current.setTerrain(null);
-                          }
-                        } catch (err) {
-                          console.warn('[App] Terrain not available in this style:', err);
-                        }
-                      }
-                    }}
-                  />
-                  Show Terrain
-                </label>
-              </div>
-              {enable3D && (
-                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '12px' }}>
-                    Pitch: {pitch}°
-                    <input
-                      type="range"
-                      min="0"
-                      max="60"
-                      value={pitch}
-                      onChange={(e) => {
-                        const newPitch = parseInt(e.target.value);
-                        setPitch(newPitch);
-                        if (map.current) {
-                          map.current.setPitch(newPitch);
-                        }
-                      }}
-                      style={{ width: '100%', marginTop: '4px' }}
-                    />
-                  </label>
-                  <label style={{ fontSize: '12px' }}>
-                    Bearing: {bearing}°
-                    <input
-                      type="range"
-                      min="-180"
-                      max="180"
-                      value={bearing}
-                      onChange={(e) => {
-                        const newBearing = parseInt(e.target.value);
-                        setBearing(newBearing);
-                        if (map.current) {
-                          map.current.setBearing(newBearing);
-                        }
-                      }}
-                      style={{ width: '100%', marginTop: '4px' }}
-                    />
-                  </label>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Old search and settings buttons removed - now in NavigationMenu */}
       
       <div className={`overlay ${overlayMinimized && wallet ? 'minimized' : ''} ${!wallet ? 'no-wallet' : ''}`}>
         <div className="overlay-header">
@@ -4344,59 +3982,6 @@ const App: React.FC = () => {
                   </div>
                 )}
                 
-                {/* NFTs Panel - Show when wallet not connected */}
-                {!wallet && nearbyNFTs.length > 0 && (
-                  <CollapsiblePanel
-                    title={`Nearby NFTs (${nearbyNFTs.length})`}
-                    minimized={nftPanelMinimized}
-                    onToggleMinimize={() => setNftPanelMinimized(!nftPanelMinimized)}
-                    className=""
-                    style={{ marginTop: '8px' }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                      {nearbyNFTs.map(nft => (
-                        <div key={nft.id} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
-                          <div><strong>{nft.name || 'Unnamed NFT'}</strong></div>
-                          {nft.description && (
-                            <div style={{ marginTop: '4px', color: '#666', fontSize: '11px' }}>{nft.description}</div>
-                          )}
-                          {nft.distance && (
-                            <div style={{ marginTop: '4px', color: '#999', fontSize: '10px' }}>
-                              {nft.distance < 1000 ? `${Math.round(nft.distance)}m away` : `${(nft.distance / 1000).toFixed(1)}km away`}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsiblePanel>
-                )}
-
-                {/* Smart Contracts Panel - Show when wallet not connected */}
-                {!wallet && nearbyContracts.length > 0 && (
-                  <CollapsiblePanel
-                    title={`Nearby Smart Contracts (${nearbyContracts.length})`}
-                    minimized={contractPanelMinimized}
-                    onToggleMinimize={() => setContractPanelMinimized(!contractPanelMinimized)}
-                    className=""
-                    style={{ marginTop: '8px' }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                      {nearbyContracts.map(contract => (
-                        <div key={contract.id} style={{ padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '6px', fontSize: '12px' }}>
-                          <div><strong>{contract.name || 'Unnamed Contract'}</strong></div>
-                          {contract.description && (
-                            <div style={{ marginTop: '4px', color: '#666', fontSize: '11px' }}>{contract.description}</div>
-                          )}
-                          {contract.distance && (
-                            <div style={{ marginTop: '4px', color: '#999', fontSize: '10px' }}>
-                              {contract.distance < 1000 ? `${Math.round(contract.distance)}m away` : `${(contract.distance / 1000).toFixed(1)}km away`}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsiblePanel>
-                )}
               </div>
             ) : (
               <>
@@ -4413,16 +3998,6 @@ const App: React.FC = () => {
                   onToggleMinimize={() => setGamePanelMinimized(!gamePanelMinimized)}
                 />
                 
-                {/* Pending Deposit Actions */}
-                {walletAddress && (
-                  <PendingDepositActions
-                    deposits={pendingDeposits}
-                    onApprove={handleApproveDeposit}
-                    onDecline={handleDeclineDeposit}
-                    walletAddress={walletAddress}
-                  />
-                )}
-
                 {/* Passkey Setup Prompt */}
                 {walletAddress && passkeyService && !passkeyService.isPasskeyEnabled() && (
                   <div style={{ marginTop: '15px', padding: '15px', backgroundColor: 'rgba(255, 215, 0, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 215, 0, 0.3)' }}>
@@ -4437,317 +4012,6 @@ const App: React.FC = () => {
                       Set Up Passkey
                     </button>
                   </div>
-                )}
-
-                {/* Combined Sessions Panel */}
-                <CombinedSessionsPanel
-                  userCurrentSession={userCurrentSession}
-                  activeSessions={activeSessions}
-                  walletAddress={walletAddress}
-                  onJoinSession={handleJoinSession}
-                  onEndSession={async (sessionId, isPlayer1, isPlayer2, sessionState) => {
-                    if (!contractClient) return;
-                    
-                    // Get game hub ID
-                    let gameHubId = process.env.REACT_APP_GAME_HUB_ID || null;
-                    if (!gameHubId) {
-                      try {
-                        if (readOnlyClient) {
-                          gameHubId = await readOnlyClient.getGameHub() || null;
-                        }
-                        if (!gameHubId && contractClient) {
-                          gameHubId = await contractClient.getGameHub() || null;
-                        }
-                      } catch (error) {
-                        console.warn('[App] Could not get Game Hub ID:', error);
-                      }
-                    }
-                    
-                    if (!gameHubId) {
-                      setNotificationState({
-                        isOpen: true,
-                        title: 'Error',
-                        message: 'Game Hub ID not configured. Cannot end session.',
-                        type: 'error',
-                        autoClose: 5000,
-                      });
-                      return;
-                    }
-                    
-                    try {
-                      if (sessionState === 'Active') {
-                        // Resolve match
-                        await contractClient.resolveMatch(sessionId);
-                      } else if (sessionState === 'Waiting') {
-                        // Call end_game on Game Hub
-                        const player1Won = isPlayer1;
-                        await contractClient.endGameOnGameHub(gameHubId, sessionId, player1Won);
-                      }
-                      
-                      // Mark this session as ended
-                      endedSessionsRef.current.add(sessionId);
-                      
-                      // Clear current session if it's the one being ended
-                      if (sessionId === userCurrentSession) {
-                        setUserCurrentSession(null);
-                        setSessionLink('');
-                      }
-                      
-                      // Refresh sessions
-                      setTimeout(async () => {
-                        await fetchActiveSessions();
-                      }, 2000);
-                      
-                      setNotificationState({
-                        isOpen: true,
-                        title: 'Session Ended',
-                        message: `Session #${sessionId} ended successfully!`,
-                        type: 'success',
-                        autoClose: 5000,
-                      });
-                    } catch (error: any) {
-                      console.error('Failed to end session:', error);
-                      setNotificationState({
-                        isOpen: true,
-                        title: 'Error',
-                        message: `Failed to end session: ${error.message || error}`,
-                        type: 'error',
-                        autoClose: 7000,
-                      });
-                    }
-                  }}
-                  onViewSessionDetails={() => setShowSessionDetailsOverlay(true)}
-                  contractClient={contractClient}
-                  gameHubId={process.env.REACT_APP_GAME_HUB_ID || null}
-                />
-
-                {/* Contract Explorer Panel - Always visible for contract exploration */}
-                <CollapsiblePanel
-                  title="Contract Explorer"
-                  minimized={contractExplorerMinimized}
-                  onToggleMinimize={() => setContractExplorerMinimized(!contractExplorerMinimized)}
-                  className="contract-explorer-panel"
-                  style={{ marginTop: '8px' }}
-                >
-                  <ContractExplorer />
-                </CollapsiblePanel>
-
-                {/* Legacy Your Session Panel - REMOVED, now in CombinedSessionsPanel */}
-                {false && userCurrentSession !== null && (
-                  <CollapsiblePanel
-                    title="Your Session"
-                    minimized={yourSessionMinimized}
-                    onToggleMinimize={() => setYourSessionMinimized(!yourSessionMinimized)}
-                    className=""
-                    style={{ marginTop: '8px', backgroundColor: '#FFD700', color: '#000', padding: '12px', borderRadius: '8px' }}
-                  >
-                    <div style={{ fontSize: '12px', marginBottom: '8px' }}>
-                      <div><strong>Session #{userCurrentSession}</strong></div>
-                      {(() => {
-                        const session = activeSessions.find(s => s.sessionId === userCurrentSession);
-                        return (
-                          <>
-                            <div style={{ marginTop: '4px' }}><strong>Status:</strong> {session?.state || 'Active'}</div>
-                            {session?.player1 && (
-                              <div style={{ marginTop: '4px' }}>
-                                <strong>Player 1:</strong> {session?.player1?.slice(0, 6)}...{session?.player1?.slice(-4)}
-                                {session?.p1CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session?.p1CellId})</span>}
-                                {session?.p1Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session?.p1Country})</span>}
-                              </div>
-                            )}
-                            {session?.player2 && (
-                              <div style={{ marginTop: '4px' }}>
-                                <strong>Player 2:</strong> {session?.player2?.slice(0, 6)}...{session?.player2?.slice(-4)}
-                                {session?.p2CellId && <span style={{ color: '#666', fontSize: '10px' }}> (Cell: {session?.p2CellId})</span>}
-                                {session?.p2Country && <span style={{ color: '#666', fontSize: '10px' }}> (Country: {session?.p2Country})</span>}
-                              </div>
-                            )}
-                            {session?.createdLedger && (
-                              <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>
-                                Created at ledger: {session?.createdLedger}
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                    {(() => {
-                      const session = activeSessions.find(s => s.sessionId === userCurrentSession);
-                      if (!session || !contractClient) return null;
-                      
-                      // Check if user is player1 or player2 in this session
-                      const isPlayer1 = session!.player1 === walletAddress;
-                      const isPlayer2 = session!.player2 === walletAddress;
-                      const isMySession = isPlayer1 || isPlayer2;
-                      
-                      if (!isMySession) return null;
-                      
-                      // End Session button - works for both Waiting and Active sessions
-                      return (
-                        <button 
-                          className="primary-button" 
-                          onClick={async () => {
-                            if (!contractClient || !walletAddress) return;
-                            
-                            // Show confirmation overlay
-                            setConfirmationState({
-                              isOpen: true,
-                              title: 'End Session',
-                              message: `Are you sure you want to end session #${userCurrentSession}? This will call end_game on the Game Hub and resolve the match.`,
-                              confirmText: 'End Session',
-                              cancelText: 'Cancel',
-                              type: 'danger',
-                              onConfirm: async () => {
-                                setConfirmationState(null);
-                                
-                                try {
-                                  if (session!.state === 'Active') {
-                                    // For Active sessions, use resolveMatch (which calls end_game)
-                                    // resolveMatch checks if players matched (same asset_tag and same/adjacent cell_id)
-                                    // and determines the winner, then calls Game Hub's end_game
-                                    const result = await contractClient.resolveMatch(userCurrentSession!);
-                                    
-                                    const winnerText = result.winner 
-                                      ? `${result.winner.slice(0, 6)}...${result.winner.slice(-4)}`
-                                      : 'None';
-                                    const matchText = result.matched ? 'Players matched!' : 'No match.';
-                                    
-                                    setNotificationState({
-                                      isOpen: true,
-                                      title: 'Session Ended',
-                                      message: `${matchText} Winner: ${winnerText}`,
-                                      type: 'success',
-                                      autoClose: 5000,
-                                    });
-                                  } else if (session!.state === 'Waiting') {
-                                    // For Waiting sessions, call Game Hub's end_game directly
-                                    // Get Game Hub ID from contract instead of env
-                                    let gameHubId: string | null = null;
-                                    try {
-                                      if (readOnlyClient) {
-                                        gameHubId = await readOnlyClient.getGameHub();
-                                      } else if (contractClient) {
-                                        gameHubId = await contractClient.getGameHub();
-                                      }
-                                    } catch (error) {
-                                      console.warn('[App] Failed to get Game Hub from contract:', error);
-                                    }
-                                    
-                                    // Fallback to env if contract doesn't have it
-                                    if (!gameHubId) {
-                                      gameHubId = process.env.REACT_APP_GAME_HUB_ID || null;
-                                    }
-                                    
-                                    if (!gameHubId) {
-                                      setNotificationState({
-                                        isOpen: true,
-                                        title: 'Error',
-                                        message: 'Game Hub ID not configured. Cannot end waiting session. Please set it in the admin panel.',
-                                        type: 'error',
-                                        autoClose: 5000,
-                                      });
-                                      return;
-                                    }
-                                    
-                                    // Call end_game on Game Hub: end_game(session_id: u32, player1_won: bool)
-                                    // For waiting sessions, we'll set player1_won based on who is ending it
-                                    const player1Won = isPlayer1; // If player1 ends it, player1 wins; if player2 ends it, player1 loses
-                                    await contractClient.endGameOnGameHub(gameHubId, userCurrentSession!, player1Won);
-                                    
-                                    setNotificationState({
-                                      isOpen: true,
-                                      title: 'Session Ended',
-                                      message: `Session #${userCurrentSession} ended successfully!`,
-                                      type: 'success',
-                                      autoClose: 5000,
-                                    });
-                                  } else {
-                                    setNotificationState({
-                                      isOpen: true,
-                                      title: 'Error',
-                                      message: `Cannot end session in ${session!.state} state.`,
-                                      type: 'error',
-                                      autoClose: 5000,
-                                    });
-                                    return;
-                                  }
-                                  
-                                  // Mark this session as ended so we don't re-add it
-                                  if (userCurrentSession !== null) {
-                                    endedSessionsRef.current.add(userCurrentSession);
-                                  }
-                                  
-                                  // Clear current session immediately
-                                  setUserCurrentSession(null);
-                                  setSessionLink('');
-                                  
-                                  // Refresh sessions after ending (with multiple attempts to ensure state is updated)
-                                  const refreshSessions = async () => {
-                                    if (readOnlyClient) {
-                                      await fetchActiveSessions();
-                                      // Check again after a short delay to ensure session state is updated
-                                      setTimeout(async () => {
-                                        await fetchActiveSessions();
-                                      }, 3000);
-                                    }
-                                  };
-                                  refreshSessions();
-                                } catch (error: any) {
-                                  console.error('Failed to end session:', error);
-                                  setNotificationState({
-                                    isOpen: true,
-                                    title: 'Error',
-                                    message: `Failed to end session: ${error.message || error}`,
-                                    type: 'error',
-                                    autoClose: 7000,
-                                  });
-                                }
-                              },
-                            });
-                          }}
-                          style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#dc3545', color: '#fff', width: '100%', marginBottom: '8px' }}
-                        >
-                          {session!.state === 'Active' ? 'End Session (Resolve Match)' : 'End Session'}
-                        </button>
-                      );
-                    })()}
-                    <button 
-                      className="primary-button" 
-                      onClick={() => {
-                        setShowSessionDetailsOverlay(true);
-                      }}
-                      style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: '#000', color: '#FFD700', width: '100%' }}
-                    >
-                      View Session Details
-                    </button>
-                  </CollapsiblePanel>
-                )}
-                
-                {/* Legacy Other Sessions Panel - REMOVED, now in CombinedSessionsPanel */}
-                
-                {isAdmin && (
-                  <AdminPanel
-                    contractClient={contractClient!}
-                    allowedCountries={allowedCountries}
-                    defaultAllowAll={defaultAllowAll}
-                    onCountryToggle={fetchCountryPolicy}
-                    map={map.current}
-                    minimized={adminPanelMinimized}
-                    onToggleMinimize={() => setAdminPanelMinimized(!adminPanelMinimized)}
-                    onAdminChanged={async () => {
-                      // Re-check admin status after admin change
-                      // This will remove admin privileges if the current user is no longer admin
-                      setTimeout(async () => {
-                        await checkAdminStatus();
-                      }, 2000); // Wait 2 seconds for transaction to settle
-                    }}
-                    walletAddress={walletAddress}
-                    mainAdminAddress={mainAdminAddress}
-                    onManageCountry={(country) => {
-                      setSelectedCountry(country);
-                      setShowCountryManagementOverlay(true);
-                    }}
-                  />
                 )}
               </>
             )}
@@ -5152,6 +4416,183 @@ const App: React.FC = () => {
           }}
         />
       )}
+
+      {/* Navigation Menu - Top Right */}
+      <NavigationMenu
+        onNavigate={(section) => setActiveOverlay(section)}
+        activeSection={activeOverlay}
+        walletAddress={walletAddress}
+        isAdmin={isAdmin}
+        onSettingsClick={() => {
+          setShowSettings(true);
+        }}
+        map={map.current}
+        markerUpdateTimeoutRef={markerUpdateTimeoutRef}
+      />
+
+      {/* Smart Contracts Overlay */}
+      <SmartContractsOverlay
+        isOpen={activeOverlay === 'smart-contracts'}
+        onClose={() => setActiveOverlay(null)}
+        walletAddress={walletAddress}
+      />
+
+      {/* Admin Overlay */}
+      {isAdmin && contractClient && (
+        <AdminOverlay
+          isOpen={activeOverlay === 'admin'}
+          onClose={() => setActiveOverlay(null)}
+          contractClient={contractClient}
+          allowedCountries={allowedCountries}
+          defaultAllowAll={defaultAllowAll}
+          onCountryToggle={() => setDefaultAllowAll(!defaultAllowAll)}
+          map={map.current}
+          walletAddress={walletAddress}
+          mainAdminAddress={mainAdminAddress}
+          onAdminChanged={async () => {
+            // Re-check admin status after admin change
+            setTimeout(async () => {
+              if (readOnlyClient && walletAddress) {
+                try {
+                  const newMainAdmin = await readOnlyClient.getAdmin();
+                  setMainAdminAddress(newMainAdmin);
+                } catch (error) {
+                  console.error('[App] Failed to refresh admin address:', error);
+                }
+              }
+            }, 2000);
+          }}
+          onManageCountry={(country) => {
+            setSelectedCountry(country);
+            setActiveOverlay(null);
+            setShowCountryManagementOverlay(true);
+          }}
+        />
+      )}
+
+      {/* Sessions Overlay */}
+      <SessionsOverlay
+        isOpen={activeOverlay === 'sessions'}
+        onClose={() => setActiveOverlay(null)}
+        userCurrentSession={userCurrentSession}
+        activeSessions={activeSessions}
+        walletAddress={walletAddress}
+        onJoinSession={handleJoinSession}
+        onEndSession={async (sessionId, isPlayer1, isPlayer2, sessionState) => {
+          if (!contractClient) return;
+          
+          setConfirmationState({
+            isOpen: true,
+            title: 'End Session',
+            message: `Are you sure you want to end session #${sessionId}? This will call end_game on the Game Hub and resolve the match.`,
+            confirmText: 'End Session',
+            cancelText: 'Cancel',
+            type: 'danger',
+            onConfirm: async () => {
+              setConfirmationState(null);
+              
+              try {
+                let gameHubId: string | null = null;
+                if (readOnlyClient) {
+                  gameHubId = await readOnlyClient.getGameHub() || await contractClient.getGameHub() || null;
+                } else if (contractClient) {
+                  gameHubId = await contractClient.getGameHub() || null;
+                }
+                
+                if (!gameHubId) {
+                  setNotificationState({
+                    isOpen: true,
+                    title: 'Error',
+                    message: 'Game Hub ID not configured. Cannot end session. Please set it in the admin panel.',
+                    type: 'error',
+                    autoClose: 5000,
+                  });
+                  return;
+                }
+
+                if (sessionState === 'Active') {
+                  await contractClient.resolveMatch(sessionId);
+                } else if (sessionState === 'Waiting') {
+                  const player1Won = isPlayer1;
+                  await contractClient.endGameOnGameHub(gameHubId, sessionId, player1Won);
+                } else {
+                  setNotificationState({
+                    isOpen: true,
+                    title: 'Error',
+                    message: `Cannot end session in ${sessionState} state.`,
+                    type: 'error',
+                    autoClose: 5000,
+                  });
+                  return;
+                }
+                
+                endedSessionsRef.current.add(sessionId);
+                
+                if (userCurrentSession === sessionId) {
+                  setUserCurrentSession(null);
+                  setSessionLink('');
+                }
+                
+                setTimeout(async () => {
+                  await fetchActiveSessions();
+                }, 2000);
+                
+                setNotificationState({
+                  isOpen: true,
+                  title: 'Session Ended',
+                  message: `Session #${sessionId} ended successfully!`,
+                  type: 'success',
+                  autoClose: 5000,
+                });
+              } catch (error: any) {
+                console.error('Failed to end session:', error);
+                setNotificationState({
+                  isOpen: true,
+                  title: 'Error',
+                  message: `Failed to end session: ${error.message || error}`,
+                  type: 'error',
+                  autoClose: 7000,
+                });
+              }
+            },
+          });
+        }}
+        onViewSessionDetails={() => {
+          setActiveOverlay(null);
+          setShowSessionDetailsOverlay(true);
+        }}
+        contractClient={contractClient}
+        gameHubId={process.env.REACT_APP_GAME_HUB_ID || null}
+      />
+
+      {/* Pending Deposits Overlay */}
+      {walletAddress && (
+        <PendingDepositsOverlay
+          isOpen={activeOverlay === 'pending-deposits'}
+          onClose={() => setActiveOverlay(null)}
+          deposits={pendingDeposits}
+          onApprove={handleApproveDeposit}
+          onDecline={handleDeclineDeposit}
+          walletAddress={walletAddress}
+        />
+      )}
+
+      {/* Settings Overlay */}
+      <SettingsOverlay
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        map={map.current}
+        mapFilters={mapFilters}
+        onMapFiltersChange={setMapFilters}
+        mapStyle={mapStyle}
+        onMapStyleChange={setMapStyle}
+        enable3D={enable3D}
+        onEnable3DChange={setEnable3D}
+        show3DBuildings={showBuildings}
+        onShow3DBuildingsChange={setShowBuildings}
+        showTerrain={showTerrain}
+        onShowTerrainChange={setShowTerrain}
+      />
     </div>
   );
 };

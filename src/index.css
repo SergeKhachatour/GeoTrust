@@ -25,3 +25,65 @@ code {
   width: 100vw;
   height: 100vh;
 }
+
+/* Fix Stellar Wallets Kit modal for mobile */
+.swk-modal,
+[class*="swk-modal"],
+[class*="stellar-wallet"],
+div[role="dialog"][class*="wallet"] {
+  max-width: 95vw !important;
+  max-height: 90vh !important;
+  margin: 5vh auto !important;
+  overflow-y: auto !important;
+}
+
+@media (max-width: 768px) and (orientation: portrait) {
+  .swk-modal,
+  [class*="swk-modal"],
+  [class*="stellar-wallet"],
+  div[role="dialog"][class*="wallet"],
+  div[class*="modal"][class*="wallet"] {
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+  
+  .swk-modal-content,
+  [class*="swk-modal-content"],
+  [class*="modal-content"],
+  [class*="wallet-modal-content"] {
+    padding: 16px !important;
+    max-height: calc(100vh - 32px) !important;
+    overflow-y: auto !important;
+    height: 100% !important;
+  }
+  
+  .swk-wallet-list,
+  [class*="swk-wallet-list"],
+  [class*="wallet-list"],
+  [class*="wallet-options"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+  
+  .swk-wallet-item,
+  [class*="swk-wallet-item"],
+  [class*="wallet-item"],
+  button[class*="wallet"],
+  [class*="wallet-button"] {
+    padding: 16px !important;
+    font-size: 16px !important;
+    min-height: 60px !important;
+    width: 100% !important;
+  }
+}
