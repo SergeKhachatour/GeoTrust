@@ -151,6 +151,21 @@ export class GeoLinkDepositService {
 
   /**
    * Execute deposit via GeoLink's execute endpoint (WebAuthn method)
+   * 
+   * According to API docs: POST /api/contracts/rules/pending/deposits/:action_id/execute
+   * 
+   * Request Body (WebAuthn method):
+   * {
+   *   passkeyPublicKeySPKI: "...",
+   *   webauthnSignature: "...",
+   *   webauthnAuthenticatorData: "...",
+   *   webauthnClientData: "...",
+   *   signaturePayload: "...",
+   *   user_public_key: "...",
+   *   user_secret_key: "..."  // Optional: for server-side signing fallback
+   * }
+   * 
+   * Response: { success: true, result: { txHash, status, returnValue, ledger, contractLogs, stellarExpertUrl } }
    */
   async executeDeposit(
     actionId: string,
@@ -161,8 +176,31 @@ export class GeoLinkDepositService {
     webauthnAuthenticatorData: string,
     webauthnClientData: string,
     signaturePayload: string
-  ): Promise<any> {
+  ): Promise<{
+    success: boolean;
+    result?: {
+      txHash?: string;
+      transaction_hash?: string;
+      status?: string;
+      returnValue?: any;
+      ledger?: number;
+      contractLogs?: any[];
+      stellarExpertUrl?: string;
+    };
+    error?: string;
+  }> {
     const url = `${this.baseUrl}/api/contracts/rules/pending/deposits/${actionId}/execute`;
+
+    // Use documented field names (camelCase)
+    const requestBody = {
+      user_public_key: publicKey,
+      user_secret_key: userSecretKey,
+      passkeyPublicKeySPKI: passkeyPublicKeySPKI,
+      webauthnSignature: webauthnSignature,
+      webauthnAuthenticatorData: webauthnAuthenticatorData,
+      webauthnClientData: webauthnClientData,
+      signaturePayload: signaturePayload,
+    };
 
     const response = await fetch(url, {
       method: 'POST',
@@ -170,15 +208,7 @@ export class GeoLinkDepositService {
         'X-API-Key': this.walletProviderKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        public_key: publicKey,
-        user_secret_key: userSecretKey,
-        webauthn_signature: webauthnSignature,
-        webauthn_authenticator_data: webauthnAuthenticatorData,
-        webauthn_client_data: webauthnClientData,
-        signature_payload: signaturePayload,
-        passkey_public_key_spki: passkeyPublicKeySPKI,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const result = await response.json();

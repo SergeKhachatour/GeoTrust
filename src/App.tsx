@@ -1697,13 +1697,13 @@ const App: React.FC = () => {
             setNotificationState({
               isOpen: true,
               title: 'Success',
-              message: `Deposit executed successfully!${result.transaction_hash ? ` Transaction: ${result.transaction_hash.slice(0, 8)}...` : ''}`,
+              message: `Deposit executed successfully!${result.result?.txHash || result.result?.transaction_hash ? ` Transaction: ${(result.result?.txHash || result.result?.transaction_hash || '').slice(0, 8)}...` : ''}`,
               type: 'success',
               autoClose: 5000,
             });
 
             // Refresh pending deposits
-            const updatedDeposits = await geolinkApi.getPendingDeposits(walletAddress);
+            const { pending_deposits: updatedDeposits } = await geolinkApi.getPendingDeposits(walletAddress);
             setPendingDeposits(updatedDeposits);
             return;
           } else {
@@ -1884,7 +1884,7 @@ const App: React.FC = () => {
       });
 
       // Refresh pending deposits
-      const updatedDeposits = await geolinkApi.getPendingDeposits(walletAddress);
+      const { pending_deposits: updatedDeposits } = await geolinkApi.getPendingDeposits(walletAddress);
       setPendingDeposits(updatedDeposits);
     } catch (error: any) {
       console.error('[App] Failed to approve deposit:', error);
@@ -1925,7 +1925,7 @@ const App: React.FC = () => {
       });
 
       // Refresh pending deposits
-      const updatedDeposits = await geolinkApi.getPendingDeposits(walletAddress);
+      const { pending_deposits: updatedDeposits } = await geolinkApi.getPendingDeposits(walletAddress);
       setPendingDeposits(updatedDeposits);
     } catch (error: any) {
       console.error('[App] Failed to decline deposit:', error);
@@ -1948,7 +1948,7 @@ const App: React.FC = () => {
 
     const fetchPendingDeposits = async () => {
       try {
-        const deposits = await geolinkApi.getPendingDeposits(walletAddress);
+        const { pending_deposits: deposits } = await geolinkApi.getPendingDeposits(walletAddress);
         setPendingDeposits(deposits);
         
         // Auto-execute deposits if auto_execute is enabled AND user has passkey

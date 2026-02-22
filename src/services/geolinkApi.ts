@@ -44,25 +44,29 @@ export interface NearbyNFT {
 
 export interface NearbyContract {
   id: number;
-  name: string;
+  rule_name?: string;
+  rule_type?: 'location' | 'proximity' | 'geofence';
+  contract_name: string;
   contract_address: string;
+  function_name?: string;
   latitude: number;
   longitude: number;
-  distance: number;
-  description?: string;
-  functions?: any[];
-  // Execution rule fields
   radius_meters?: number;
-  function_name?: string;
+  distance: number;  // Distance from search center in meters
+  network?: 'testnet' | 'mainnet';
+  trigger_on?: 'enter' | 'exit' | 'both';
+  auto_execute?: boolean;
+  is_active?: boolean;  // ⚠️ NOTE: Shows both active AND inactive rules
+  requires_webauthn?: boolean;
+  use_smart_wallet?: boolean;
   function_mappings?: {
     [functionName: string]: any;
   };
-  requires_webauthn?: boolean;
-  use_smart_wallet?: boolean;
-  auto_execute?: boolean;
-  network?: 'testnet' | 'mainnet';
-  rule_name?: string;
-  trigger_on?: string;
+  discovered_functions?: any[];
+  description?: string;
+  // Legacy fields for backward compatibility
+  name?: string;
+  functions?: any[];
 }
 
 export interface SessionData {
@@ -526,19 +530,37 @@ class GeoLinkApiClient {
    * Get pending deposit actions for a user (uses Wallet Provider key)
    * GeoLink creates these when user location satisfies contract execution rules
    */
-  async getPendingDeposits(publicKey: string): Promise<PendingDepositAction[]> {
+  /**
+   * Get pending deposit actions for a user (uses Wallet Provider key)
+   * GeoLink creates these when user location satisfies contract execution rules
+   * 
+   * According to API docs: GET /api/contracts/rules/pending/deposits
+   * Query Parameters:
+   * - public_key (optional): Filter by public key
+   * - limit (optional): Limit results (default: 100)
+   * 
+   * Response: { success: true, pending_deposits: [...], count: N }
+   */
+  async getPendingDeposits(publicKey: string): Promise<{ pending_deposits: PendingDepositAction[] }> {
     if (!this.walletProviderKey) {
       console.warn('[GeoLinkAPI] Wallet Provider API key not configured, cannot fetch pending deposits');
-      return [];
+      return { pending_deposits: [] };
     }
     
     try {
-      const response = await this.request<{ deposits?: PendingDepositAction[]; pending_deposits?: PendingDepositAction[] }>(
+      const response = await this.request<{ 
+        success?: boolean;
+        pending_deposits?: PendingDepositAction[];
+        deposits?: PendingDepositAction[];  // Backward compatibility
+        count?: number;
+      }>(
         `/api/contracts/rules/pending/deposits?public_key=${publicKey}`,
         {},
         true // Use wallet provider key
       );
-      return response.deposits || response.pending_deposits || [];
+      // Support both documented format and legacy format
+      const deposits = response.pending_deposits || response.deposits || [];
+      return { pending_deposits: deposits };
     } catch (error: any) {
       // If endpoint doesn't exist (404) or has missing parameters (400), return empty array
       if (
@@ -549,10 +571,10 @@ class GeoLinkApiClient {
         error.message?.includes('Bad Request')
       ) {
         console.log('[GeoLinkAPI] Pending deposits endpoint not available or requires different parameters');
-        return [];
+        return { pending_deposits: [] };
       }
       console.warn('[GeoLinkAPI] Failed to get pending deposits:', error);
-      return [];
+      return { pending_deposits: [] };
     }
   }
 
@@ -579,19 +601,56 @@ class GeoLinkApiClient {
   /**
    * Execute a pending deposit action (uses Wallet Provider key)
    * Supports both WebAuthn (passkey) and wallet signing methods
+   * 
+   * According to API docs: POST /api/contracts/rules/pending/deposits/:action_id/execute
+   * 
+   * Request Body Options:
+   * - Option 1: Signed XDR (RECOMMENDED - most secure)
+   *   { signedXDR: "AAAAA..." }
+   * 
+   * - Option 2: WebAuthn data
+   *   { passkeyPublicKeySPKI, webauthnSignature, webauthnAuthenticatorData, webauthnClientData, signaturePayload }
+   * 
+   * - Option 3: Server-side signing (less secure - backward compatibility)
+   *   { user_public_key, user_secret_key }
+   * 
+   * Response: { success: true, result: { txHash, status, returnValue, ledger, stellarExpertUrl } }
    */
   async executePendingDeposit(actionId: string, executionData: {
-    public_key: string;
+    // Option 1: Signed XDR (RECOMMENDED)
+    signedXDR?: string;
+    
+    // Option 2: WebAuthn (passkey)
+    passkeyPublicKeySPKI?: string;
+    webauthnSignature?: string;
+    webauthnAuthenticatorData?: string;
+    webauthnClientData?: string;
+    signaturePayload?: string;
+    
+    // Option 3: Server-side signing (backward compatibility - less secure)
+    user_public_key?: string;
     user_secret_key?: string;
+    
+    // Legacy field names (for backward compatibility)
+    public_key?: string;
     webauthn_signature?: string;
     webauthn_authenticator_data?: string;
     webauthn_client_data?: string;
-    signature_payload?: string;
     passkey_public_key_spki?: string;
-    // Wallet signing method (alternative to WebAuthn)
     transaction_xdr?: string;
-    use_wallet_signing?: boolean;
-  }): Promise<any> {
+  }): Promise<{
+    success: boolean;
+    result?: {
+      txHash?: string;
+      transaction_hash?: string;
+      status?: string;
+      returnValue?: any;
+      ledger?: number;
+      contractLogs?: any[];
+      stellarExpertUrl?: string;
+    };
+    error?: string;
+  }> {
     if (!this.walletProviderKey) {
       throw new Error('Wallet Provider API key is not configured');
     }
