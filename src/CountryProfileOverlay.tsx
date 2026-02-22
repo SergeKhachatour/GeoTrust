@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ContractClient } from './contract';
 import { ReadOnlyContractClient } from './contract-readonly';
-import { extractCountryInfo, validateCountryCode } from './utils/countryVaultUtils';
+import { extractCountryInfo } from './utils/countryVaultUtils';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
 import { PasskeyService } from './services/passkeyService';
 
@@ -225,7 +225,7 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
     };
     
     loadCountryVaultInfo();
-  }, [isOpen, countryCode, contractClient, walletAddress]);
+  }, [isOpen, countryCode, contractClient, walletAddress, readOnlyClient]);
 
   if (!isOpen) return null;
 
@@ -491,8 +491,8 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
                                     // clientDataJSON from PasskeyService is already base64 encoded
                                     const clientDataJSON = authResult.clientDataJSON;
                                     
-                                    // Get passkey public key SPKI
-                                    const passkeyPublicKeySPKI = await passkeyService.getPasskeyPublicKeySPKI(passkeyData.id);
+                                    // Get passkey public key SPKI (for future verification if needed)
+                                    // const passkeyPublicKeySPKI = await passkeyService.getPasskeyPublicKeySPKI(passkeyData.id);
                                     
                                     // Use contract client to deposit (handles wallet signing)
                                     if (!contractClient) {
