@@ -1065,7 +1065,11 @@ const App: React.FC = () => {
                 const assetAddress = process.env.REACT_APP_NATIVE_XLM_SAC_ADDRESS || 
                   'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
                 const contractId = process.env.REACT_APP_CONTRACT_ID;
-                const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+                // Use relative path in production, or env var if set
+                const isDevelopment = typeof window !== 'undefined' && 
+                  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+                const backendUrl = process.env.REACT_APP_BACKEND_URL || 
+                  (isDevelopment ? 'http://localhost:8080' : '');
                 
                 if (!contractId) {
                   console.warn('[App] Missing contract ID for vault balance');
@@ -3609,14 +3613,17 @@ const App: React.FC = () => {
           console.log('[App] REACT_APP_GAME_HUB_ID from env:', gameHubId);
           
           // First check if Game Hub is already set
+          let currentGameHub: string | null = null;
           try {
             // Use read-only client to avoid Freighter prompts
             const client = readOnlyClient || new ReadOnlyContractClient();
-            const currentGameHub = await client.getGameHub();
+            currentGameHub = await client.getGameHub();
             if (currentGameHub) {
               console.log('[App] ✅ Game Hub already set in contract:', currentGameHub);
               if (gameHubId && currentGameHub !== gameHubId) {
                 console.warn('[App] ⚠️ Game Hub mismatch! Contract has:', currentGameHub, 'but env has:', gameHubId);
+              } else if (gameHubId && currentGameHub === gameHubId) {
+                console.log('[App] ✅ Game Hub already matches env, skipping set');
               }
             } else {
               console.log('[App] Game Hub not set in contract, will set it now');
@@ -3625,7 +3632,8 @@ const App: React.FC = () => {
             console.warn('[App] Could not check Game Hub status (get_game_hub may not be implemented yet):', error);
           }
           
-          if (gameHubId) {
+          // Only set Game Hub if it's not already set to the correct value
+          if (gameHubId && currentGameHub !== gameHubId) {
             try {
               console.log('[App] Setting Game Hub contract:', gameHubId);
               await contractClient.setGameHub(gameHubId);
@@ -3654,13 +3662,25 @@ const App: React.FC = () => {
               if (errorMsg.includes('rejected by user') || errorMsg.includes('Transaction was rejected')) {
                 console.warn('[App] Game Hub setup was cancelled by user');
               } else if (errorMsg.includes('txBadSeq')) {
-                console.warn('[App] Sequence number issue - Game Hub will need to be set manually later');
+                console.warn('[App] Sequence number issue - Game Hub may already be set or needs manual setting');
+                // Try to verify if it's actually set despite the error
+                try {
+                  const client = readOnlyClient || new ReadOnlyContractClient();
+                  const verifyGameHub = await client.getGameHub();
+                  if (verifyGameHub === gameHubId) {
+                    console.log('[App] ✅ Game Hub is actually set correctly despite txBadSeq error');
+                  }
+                } catch (verifyError) {
+                  console.warn('[App] Could not verify Game Hub after txBadSeq error');
+                }
               } else if (errorMsg.includes('already') || errorMsg.includes('set')) {
                 console.warn('[App] Game Hub may already be set');
               } else {
                 console.warn('[App] Failed to set Game Hub (non-critical):', errorMsg);
               }
             }
+          } else if (gameHubId && currentGameHub === gameHubId) {
+            console.log('[App] ✅ Game Hub already set correctly, no action needed');
           } else {
             console.warn('[App] ⚠️ REACT_APP_GAME_HUB_ID not set in environment');
             console.warn('[App] ⚠️ Game Hub calls (start_game/end_game) will NOT work!');

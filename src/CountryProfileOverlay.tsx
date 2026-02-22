@@ -188,7 +188,11 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
                   const assetAddress = process.env.REACT_APP_NATIVE_XLM_SAC_ADDRESS || 
                     'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
                   const contractId = process.env.REACT_APP_CONTRACT_ID;
-                  const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+                  // Use relative path in production, or env var if set
+                  const isDevelopment = typeof window !== 'undefined' && 
+                    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+                  const backendUrl = process.env.REACT_APP_BACKEND_URL || 
+                    (isDevelopment ? 'http://localhost:8080' : '');
                   
                   if (contractId) {
                     const response = await fetch(`${backendUrl}/api/smart-wallet/get-balance`, {
@@ -520,7 +524,11 @@ export const CountryProfileOverlay: React.FC<CountryProfileOverlayProps> = ({
                                     // Reload balance
                                     setIsLoadingVaultBalance(true);
                                     try {
-                                      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+                                      // Use relative path in production, or env var if set
+                                      const isDevelopment = typeof window !== 'undefined' && 
+                                        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+                                      const backendUrl = process.env.REACT_APP_BACKEND_URL || 
+                                        (isDevelopment ? 'http://localhost:8080' : '');
                                       const balanceResponse = await fetch(`${backendUrl}/api/smart-wallet/get-balance`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
