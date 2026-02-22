@@ -1,6 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractclient, contractimpl, contracttype, symbol_short, vec, Address, BytesN, Env, Map, Vec, IntoVal,
+    contract, contractclient, contractimpl, contracttype, symbol_short, vec, Address, BytesN, Env, Map, Vec, IntoVal, String,
+    token, Bytes,
 };
 
 // Import GameHub contract interface
@@ -63,6 +64,15 @@ pub struct Session {
 pub struct MatchResult {
     pub matched: bool,
     pub winner: Option<Address>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct CountryInfo {
+    pub code: String,           // ISO 3166-1 alpha-2 country code (e.g., "US", "GB", "FR")
+    pub name: String,            // Full country name
+    pub enabled: bool,          // Whether country vault is enabled
+    pub created_at: u64,        // Timestamp when country was registered
 }
 
 #[contract]
@@ -515,6 +525,352 @@ impl GeoTrustMatch {
             .instance()
             .get(&symbol_short!("DefAllow"))
             .unwrap_or(false)
+    }
+
+    // ========== Country Vault Functions ==========
+
+    /// Validate country code (must be 2 uppercase letters, registered, and enabled)
+    fn validate_country_code(env: &Env, country_code: &String) -> bool {
+        // Check length (must be 2 characters)
+        if country_code.len() != 2 {
+            return false;
+        }
+        
+        // Check if country is registered
+        let country_registry: Map<String, CountryInfo> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("CntReg"))
+            .unwrap_or(Map::new(env));
+        
+        match country_registry.get(country_code.clone()) {
+            Some(country_info) => country_info.enabled,
+            None => false,
+        }
+    }
+
+    /// Register a new country code (admin-only)
+    pub fn register_country(
+        env: Env,
+        country_code: String,
+        country_name: String,
+        admin_address: Address,
+    ) -> bool {
+        admin_address.require_auth();
+        Self::require_admin_auth(&env, None);
+
+        // Validate country code format (must be 2 uppercase letters)
+        if country_code.len() != 2 {
+            panic!("Country code must be exactly 2 characters");
+        }
+
+        let mut country_registry: Map<String, CountryInfo> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("CntReg"))
+            .unwrap_or(Map::new(&env));
+
+        // Check if country already exists
+        if country_registry.contains_key(country_code.clone()) {
+            panic!("Country already registered");
+        }
+
+        let country_info = CountryInfo {
+            code: country_code.clone(),
+            name: country_name,
+            enabled: true,
+            created_at: env.ledger().timestamp(),
+        };
+
+        country_registry.set(country_code, country_info);
+        env.storage().persistent().set(&symbol_short!("CntReg"), &country_registry);
+
+        true
+    }
+
+    /// Enable or disable a country vault (admin-only)
+    pub fn set_country_enabled(
+        env: Env,
+        country_code: String,
+        enabled: bool,
+        admin_address: Address,
+    ) -> bool {
+        admin_address.require_auth();
+        Self::require_admin_auth(&env, None);
+
+        let mut country_registry: Map<String, CountryInfo> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("CntReg"))
+            .unwrap_or(Map::new(&env));
+
+        let mut country_info = country_registry
+            .get(country_code.clone())
+            .unwrap_or_else(|| panic!("Country not registered"));
+
+        country_info.enabled = enabled;
+        country_registry.set(country_code, country_info);
+        env.storage().persistent().set(&symbol_short!("CntReg"), &country_registry);
+
+        true
+    }
+
+    /// Get country info
+    pub fn get_country_info(env: Env, country_code: String) -> Option<CountryInfo> {
+        let country_registry: Map<String, CountryInfo> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("CntReg"))
+            .unwrap_or(Map::new(&env));
+        
+        country_registry.get(country_code)
+    }
+
+    /// Deposit tokens to country-specific vault
+    /// Following the same pattern as XYZ-Wallet: verify auth, check balance, transfer, update storage
+    pub fn deposit(
+        env: Env,
+        user_address: Address,
+        country_code: String,
+        asset: Address,
+        amount: i128,
+        _signature_payload: Bytes, // WebAuthn signature payload (can be verified externally)
+        _webauthn_signature: Bytes, // WebAuthn signature (for future verification)
+        _webauthn_authenticator_data: Bytes, // WebAuthn authenticator data
+        _webauthn_client_data: Bytes, // WebAuthn client data JSON
+    ) -> bool {
+        if amount <= 0 {
+            panic!("Amount must be positive");
+        }
+
+        // Validate country code (must be registered and enabled)
+        // Check this early to fail fast with clear error
+        if country_code.len() != 2 {
+            panic!("Country code must be exactly 2 characters");
+        }
+        
+        let country_registry: Map<String, CountryInfo> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("CntReg"))
+            .unwrap_or(Map::new(&env));
+        
+        let country_info = match country_registry.get(country_code.clone()) {
+            Some(info) => info,
+            None => panic!("Country not registered"),
+        };
+        
+        if !country_info.enabled {
+            panic!("Country vault is disabled");
+        }
+
+        // Create token client and check user's token balance FIRST
+        // Check balance before requiring auth to avoid unnecessary auth if balance is insufficient
+        let token_client = token::Client::new(&env, &asset);
+        let contract_address = env.current_contract_address();
+        
+        // Check user's token balance before attempting transfer
+        // This is a read operation, doesn't require authorization
+        let user_token_balance = token_client.balance(&user_address);
+        if user_token_balance < amount {
+            panic!("Insufficient token balance");
+        }
+
+        // Require authorization from the user AFTER balance check
+        // Soroban's authorization framework handles signature verification and replay prevention
+        // This must be called before any token operations to ensure proper authorization
+        user_address.require_auth();
+
+        // Transfer tokens from user to contract
+        // The user is directly transferring their tokens to the contract
+        // Authorization is already verified via require_auth() above
+        // The SDK will automatically handle the authorization for the nested token contract call
+        token_client.transfer(&user_address, &contract_address, &amount);
+
+        // Update country-specific balance
+        // Storage structure: Map<Address, Map<String, Map<Address, i128>>>
+        // (user -> country_code -> asset -> balance)
+        let mut balances_map: Map<Address, Map<String, Map<Address, i128>>> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("Balances"))
+            .unwrap_or(Map::new(&env));
+
+        let mut user_balances: Map<String, Map<Address, i128>> = balances_map
+            .get(user_address.clone())
+            .unwrap_or(Map::new(&env));
+
+        let mut country_balances: Map<Address, i128> = user_balances
+            .get(country_code.clone())
+            .unwrap_or(Map::new(&env));
+
+        let current_balance = country_balances.get(asset.clone()).unwrap_or(0);
+        let new_balance = current_balance.checked_add(amount)
+            .unwrap_or_else(|| panic!("Balance overflow"));
+        country_balances.set(asset.clone(), new_balance);
+        user_balances.set(country_code.clone(), country_balances);
+        balances_map.set(user_address.clone(), user_balances);
+        env.storage().persistent().set(&symbol_short!("Balances"), &balances_map);
+
+        true
+    }
+
+    /// Execute payment from country-specific vault
+    /// Following the same pattern as XYZ-Wallet: verify auth, check balance, transfer, update storage
+    pub fn execute_payment(
+        env: Env,
+        signer_address: Address,
+        country_code: String,
+        destination: Address,
+        amount: i128,
+        asset: Address,
+        _signature_payload: Bytes, // WebAuthn signature payload (can be verified externally)
+        _webauthn_signature: Bytes, // WebAuthn signature (for future verification)
+        _webauthn_authenticator_data: Bytes, // WebAuthn authenticator data
+        _webauthn_client_data: Bytes, // WebAuthn client data JSON
+    ) -> bool {
+        // Validate country code first
+        if !Self::validate_country_code(&env, &country_code) {
+            panic!("Invalid or disabled country code");
+        }
+
+        if amount <= 0 {
+            panic!("Amount must be positive");
+        }
+
+        // Require authorization from the user BEFORE token operations
+        // Soroban's authorization framework handles signature verification and replay prevention
+        signer_address.require_auth();
+
+        // Check user's logical balance for this asset in this country
+        // The contract tracks per-user, per-country balances in storage
+        let user_balance = Self::get_balance(env.clone(), signer_address.clone(), country_code.clone(), asset.clone());
+        if user_balance < amount {
+            panic!("Insufficient balance");
+        }
+
+        // Create token client for the asset
+        let token_client = token::Client::new(&env, &asset);
+        let contract_address = env.current_contract_address();
+        
+        // Custodial model: Contract holds the tokens
+        // Transfer directly from contract's balance to destination
+        token_client.transfer(&contract_address, &destination, &amount);
+
+        // Update country-specific balance (deduct the transferred amount)
+        let mut balances_map: Map<Address, Map<String, Map<Address, i128>>> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("Balances"))
+            .unwrap_or(Map::new(&env));
+
+        let mut user_balances: Map<String, Map<Address, i128>> = balances_map
+            .get(signer_address.clone())
+            .unwrap_or(Map::new(&env));
+
+        let mut country_balances: Map<Address, i128> = user_balances
+            .get(country_code.clone())
+            .unwrap_or(Map::new(&env));
+
+        let current_balance = country_balances.get(asset.clone()).unwrap_or(0);
+        let new_balance = current_balance.checked_sub(amount)
+            .unwrap_or_else(|| panic!("Balance underflow"));
+        country_balances.set(asset.clone(), new_balance);
+        user_balances.set(country_code.clone(), country_balances);
+        balances_map.set(signer_address.clone(), user_balances);
+        env.storage().persistent().set(&symbol_short!("Balances"), &balances_map);
+
+        true
+    }
+
+    /// Get balance for a specific country and asset
+    pub fn get_balance(
+        env: Env,
+        user_address: Address,
+        country_code: String,
+        asset: Address,
+    ) -> i128 {
+        let balances_map: Map<Address, Map<String, Map<Address, i128>>> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("Balances"))
+            .unwrap_or(Map::new(&env));
+
+        let user_balances: Map<String, Map<Address, i128>> = balances_map
+            .get(user_address)
+            .unwrap_or(Map::new(&env));
+
+        let country_balances: Map<Address, i128> = user_balances
+            .get(country_code)
+            .unwrap_or(Map::new(&env));
+
+        country_balances.get(asset).unwrap_or(0)
+    }
+
+    /// Get all asset balances for a user in a specific country
+    pub fn get_user_country_balances(
+        env: Env,
+        user_address: Address,
+        country_code: String,
+    ) -> Map<Address, i128> {
+        let balances_map: Map<Address, Map<String, Map<Address, i128>>> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("Balances"))
+            .unwrap_or(Map::new(&env));
+
+        let user_balances: Map<String, Map<Address, i128>> = balances_map
+            .get(user_address)
+            .unwrap_or(Map::new(&env));
+
+        user_balances.get(country_code).unwrap_or(Map::new(&env))
+    }
+
+    /// Get all countries where user has balances
+    pub fn get_user_countries(env: Env, user_address: Address) -> Vec<String> {
+        let balances_map: Map<Address, Map<String, Map<Address, i128>>> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("Balances"))
+            .unwrap_or(Map::new(&env));
+
+        let user_balances: Map<String, Map<Address, i128>> = balances_map
+            .get(user_address)
+            .unwrap_or(Map::new(&env));
+
+        let mut result = vec![&env];
+        user_balances.iter().for_each(|(country_code, _)| {
+            result.push_back(country_code);
+        });
+
+        result
+    }
+
+    /// Get total balance across all countries for a specific asset
+    pub fn get_total_balance(
+        env: Env,
+        user_address: Address,
+        asset: Address,
+    ) -> i128 {
+        let balances_map: Map<Address, Map<String, Map<Address, i128>>> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("Balances"))
+            .unwrap_or(Map::new(&env));
+
+        let user_balances: Map<String, Map<Address, i128>> = balances_map
+            .get(user_address)
+            .unwrap_or(Map::new(&env));
+
+        let mut total = 0i128;
+        user_balances.iter().for_each(|(_, country_balances)| {
+            if let Some(balance) = country_balances.get(asset.clone()) {
+                total = total.checked_add(balance)
+                    .unwrap_or_else(|| panic!("Total balance overflow"));
+            }
+        });
+
+        total
     }
 }
 

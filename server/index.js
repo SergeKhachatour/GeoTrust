@@ -91,6 +91,7 @@ app.use('/api/soroban-rpc', require('./routes/soroban-rpc'));
 // Apply more lenient rate limiting to contract readonly endpoint (before the route)
 app.use('/api/contract/readonly', readonlyLimiter);
 app.use('/api/contract', require('./routes/contract'));
+app.use('/api/smart-wallet', require('./routes/smart-wallet'));
 
 // Health check
 app.get('/health', (req, res) => {

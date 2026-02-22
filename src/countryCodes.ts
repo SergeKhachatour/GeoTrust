@@ -12,9 +12,39 @@ export const ISO2_TO_NUMERIC: Record<string, number> = {
   'ET': 231, 'GH': 288, 'TZ': 834, 'UG': 800, 'MA': 504, 'DZ': 12, 'TN': 788, 'LY': 434,
   'SD': 729, 'AO': 24, 'MZ': 508, 'ZM': 894, 'ZW': 716, 'BW': 72, 'NA': 516, 'MG': 450,
   'RU': 643, 'UA': 804, 'BY': 112, 'KZ': 398, 'UZ': 860, 'TM': 795, 'TJ': 762, 'KG': 417,
-  'AF': 4, 'IR': 364, 'IQ': 368, 'SA': 682, 'AE': 784, 'IL': 376, 'JO': 400, 'LB': 422,
+  'AF': 4, 'IR': 364, 'IQ': 368, 'SA': 682, 'AE': 784, 'IL': 376, 'JO': 400, 'KW': 414, 'LB': 422,
   'SY': 760, 'TR': 792, 'GE': 268, 'AM': 51, 'AZ': 31, 'AL': 8, 'MK': 807, 'RS': 688,
-  'BA': 70, 'ME': 499, 'XK': 383, 'MD': 498, 'AFG': 4, 'ALB': 8, 'DZA': 12, 'ASM': 16,
+  'BA': 70, 'ME': 499, 'XK': 383, 'MD': 498,
+  // Additional ISO2 codes
+  'AD': 20, 'AG': 28, 'AI': 660, 'AN': 530, 'AQ': 10, 'AS': 16, 'AW': 533, 'AX': 248,
+  'BB': 52, 'BF': 854, 'BH': 48, 'BI': 108, 'BJ': 204, 'BL': 652, 'BM': 60, 'BN': 96,
+  'BS': 44, 'BT': 64, 'BV': 74, 'BZ': 84,
+  'CC': 166, 'CD': 180, 'CF': 140, 'CG': 178, 'CI': 384, 'CK': 184, 'CM': 120, 'CR': 188,
+  'CU': 192, 'CV': 132, 'CX': 162,
+  'DJ': 262, 'DM': 212, 'DO': 214,
+  'EH': 732, 'ER': 232,
+  'FJ': 242, 'FK': 238, 'FM': 583, 'FO': 234,
+  'GA': 266, 'GD': 308, 'GF': 254, 'GG': 831, 'GI': 292, 'GL': 304, 'GM': 270, 'GN': 324,
+  'GP': 312, 'GQ': 226, 'GS': 239, 'GT': 320, 'GU': 316, 'GW': 624, 'GY': 328,
+  'HM': 334, 'HN': 340, 'HT': 332,
+  'IM': 833, 'IO': 86,
+  'JE': 832, 'JM': 388,
+  'KH': 116, 'KI': 296, 'KM': 174, 'KN': 659, 'KP': 408, 'KY': 136,
+  'LA': 418, 'LC': 662, 'LI': 438, 'LK': 144, 'LR': 430, 'LS': 426,
+  'MC': 492, 'MF': 663, 'MH': 584, 'ML': 466, 'MM': 104, 'MN': 496, 'MO': 446, 'MP': 580,
+  'MQ': 474, 'MR': 478, 'MS': 500, 'MU': 480, 'MV': 462, 'MW': 454,
+  'NC': 540, 'NE': 562, 'NF': 574, 'NI': 558, 'NP': 524, 'NR': 520, 'NU': 570,
+  'OM': 512,
+  'PA': 591, 'PF': 258, 'PG': 598, 'PM': 666, 'PN': 612, 'PR': 630, 'PS': 275, 'PW': 585,
+  'QA': 634,
+  'RE': 638, 'RW': 646,
+  'SB': 90, 'SC': 690, 'SH': 654, 'SJ': 744, 'SL': 694, 'SM': 674, 'SN': 686, 'SO': 706,
+  'SR': 740, 'SS': 728, 'ST': 678, 'SV': 222, 'SX': 534, 'SZ': 748,
+  'TC': 796, 'TD': 148, 'TF': 260, 'TG': 768, 'TK': 772, 'TL': 626, 'TO': 776, 'TT': 780, 'TV': 798,
+  'UM': 840,
+  'VA': 336, 'VC': 670, 'VG': 92, 'VI': 850, 'VU': 548,
+  'WF': 876, 'WS': 882,
+  'YE': 887, 'YT': 175, 'AFG': 4, 'ALB': 8, 'DZA': 12, 'ASM': 16,
   'AND': 20, 'AGO': 24, 'AIA': 660, 'ATA': 10, 'ATG': 28, 'ARG': 32, 'ARM': 51, 'ABW': 533,
   'AUS': 36, 'AUT': 40, 'AZE': 31, 'BHS': 44, 'BHR': 48, 'BGD': 50, 'BRB': 52, 'BLR': 112,
   'BEL': 56, 'BLZ': 84, 'BEN': 204, 'BMU': 60, 'BTN': 64, 'BOL': 68, 'BIH': 70, 'BWA': 72,
@@ -64,7 +94,7 @@ const ISO3_TO_ISO2: Record<string, string> = {
   'GTM': 'GT', 'GGY': 'GG', 'GIN': 'GN', 'GNB': 'GW', 'GUY': 'GY', 'HTI': 'HT', 'HMD': 'HM', 'VAT': 'VA',
   'HND': 'HN', 'HKG': 'HK', 'HUN': 'HU', 'ISL': 'IS', 'IND': 'IN', 'IDN': 'ID', 'IRN': 'IR', 'IRQ': 'IQ',
   'IRL': 'IE', 'IMN': 'IM', 'ISR': 'IL', 'ITA': 'IT', 'JAM': 'JM', 'JPN': 'JP', 'JEY': 'JE', 'JOR': 'JO',
-  'KAZ': 'KZ', 'KEN': 'KE', 'KIR': 'KI', 'KWT': 'KW', 'KGZ': 'KG', 'LAO': 'LA', 'LVA': 'LV', 'LBN': 'LB',
+  'KAZ': 'KZ', 'KEN': 'KE', 'KIR': 'KI', 'KOR': 'KR', 'KWT': 'KW', 'KGZ': 'KG', 'LAO': 'LA', 'LVA': 'LV', 'LBN': 'LB',
   'LSO': 'LS', 'LBR': 'LR', 'LBY': 'LY', 'LIE': 'LI', 'LTU': 'LT', 'LUX': 'LU', 'MAC': 'MO', 'MDG': 'MG',
   'MWI': 'MW', 'MYS': 'MY', 'MDV': 'MV', 'MLI': 'ML', 'MLT': 'MT', 'MHL': 'MH', 'MTQ': 'MQ', 'MRT': 'MR',
   'MUS': 'MU', 'MYT': 'YT', 'MEX': 'MX', 'FSM': 'FM', 'MDA': 'MD', 'MCO': 'MC', 'MNG': 'MN', 'MNE': 'ME',
@@ -83,9 +113,11 @@ const ISO3_TO_ISO2: Record<string, string> = {
   'ESH': 'EH', 'YEM': 'YE', 'ZMB': 'ZM', 'ZWE': 'ZW', 'ALA': 'AX', 'ANT': 'AN', 'BVT': 'BV'
 };
 
-export function iso3ToIso2(iso3: string): string {
+export function iso3ToIso2(iso3: string | number | null | undefined): string {
   if (!iso3) return '';
-  const upper = iso3.toUpperCase();
+  // Convert to string if it's a number or other type
+  const iso3Str = typeof iso3 === 'string' ? iso3 : String(iso3);
+  const upper = iso3Str.toUpperCase();
   return ISO3_TO_ISO2[upper] || '';
 }
 

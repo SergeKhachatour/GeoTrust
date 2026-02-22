@@ -12,6 +12,7 @@ import { SessionDetailsOverlay } from './SessionDetailsOverlay';
 import { CountryManagementOverlay } from './CountryManagementOverlay';
 import { CountryProfileOverlay } from './CountryProfileOverlay';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
+import { extractCountryInfo } from './utils/countryVaultUtils';
 import { Horizon } from '@stellar/stellar-sdk';
 import { geolinkApi, NearbyNFT, NearbyContract, PendingDepositAction } from './services/geolinkApi';
 import { PasskeySetupModal } from './components/PasskeySetupModal';
@@ -299,6 +300,17 @@ const App: React.FC = () => {
   const [showCountryManagementOverlay, setShowCountryManagementOverlay] = useState(false);
   const [showCountryProfileOverlay, setShowCountryProfileOverlay] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<{ code: number; name: string } | null>(null);
+  
+  // Country hover tooltip state
+  const [hoveredCountry, setHoveredCountry] = useState<{
+    countryCode: number;
+    countryName: string;
+    iso2: string | null;
+    position: { x: number; y: number };
+  } | null>(null);
+  const [vaultBalance, setVaultBalance] = useState<number | null>(null);
+  const [isLoadingVaultBalance, setIsLoadingVaultBalance] = useState(false);
+  const [hoveredVaultInfo, setHoveredVaultInfo] = useState<{ registered: boolean; enabled: boolean } | null>(null);
   
   // Session details overlay state
   const [showSessionDetailsOverlay, setShowSessionDetailsOverlay] = useState(false);
@@ -947,8 +959,196 @@ const App: React.FC = () => {
       map.current.on('click', 'countries-fill', handleCountryClick);
       map.current.getCanvas().style.cursor = 'pointer';
       
+      // Add hover handlers for vault balance tooltip
+      const handleCountryMouseEnter = async (e: mapboxgl.MapMouseEvent) => {
+        const features = map.current!.queryRenderedFeatures(e.point, {
+          layers: ['countries-fill'],
+        });
+
+        if (features.length > 0) {
+          const feature = features[0];
+          
+          // Use extractCountryInfo utility to properly extract country info from GeoJSON
+          const countryInfo = extractCountryInfo(feature);
+          
+          let countryCode: number | null = null;
+          let iso2: string | null = null;
+          let countryName: string = 'Unknown Country';
+          
+          if (countryInfo) {
+            // Use the extracted info
+            iso2 = countryInfo.iso2;
+            countryCode = countryInfo.numeric || null;
+            countryName = countryInfo.name;
+          } else {
+            // Fallback: try to get from properties directly
+            countryCode = feature.properties?.ISO_NUMERIC ? Number(feature.properties.ISO_NUMERIC) : null;
+            iso2 = feature.properties?.ISO2 || null;
+            countryName = feature.properties?.name || feature.properties?.NAME || 'Unknown Country';
+            
+            // If we have countryCode but no iso2, try to convert
+            if (countryCode && !iso2) {
+              // Try to get from feature.id (ISO3) or properties
+              const iso3 = feature.id || feature.properties?.id || feature.properties?.ISO3;
+              if (iso3) {
+                const iso3Str = typeof iso3 === 'string' ? iso3 : String(iso3);
+                const convertedIso2 = iso3ToIso2(iso3Str);
+                if (convertedIso2) {
+                  iso2 = convertedIso2;
+                }
+              }
+            }
+            
+            // If we have iso2 but no countryCode, convert
+            if (iso2 && !countryCode) {
+              countryCode = iso2ToNumeric(iso2);
+            }
+          }
+          
+          if (countryCode) {
+            // Set hovered country
+            setHoveredCountry({
+              countryCode: countryCode,
+              countryName: countryName,
+              iso2: iso2 ? iso2.toUpperCase() : null,
+              position: { x: e.point.x, y: e.point.y }
+            });
+            
+            // Load vault info and balance if user is logged in and ISO2 is available
+            if (walletAddress && iso2 && /^[A-Z]{2}$/.test(iso2)) {
+              setIsLoadingVaultBalance(true);
+              setVaultBalance(null);
+              setHoveredVaultInfo(null);
+              
+              try {
+                // First check if vault is registered with timeout
+                const readOnlyClient = new ReadOnlyContractClient();
+                
+                // Add timeout to prevent hanging (3 seconds should be enough)
+                const vaultInfoPromise = readOnlyClient.getCountryInfo(iso2);
+                const timeoutPromise = new Promise<null>((_, reject) => 
+                  setTimeout(() => reject(new Error('Timeout')), 3000)
+                );
+                
+                let vaultInfo: any = null;
+                try {
+                  vaultInfo = await Promise.race([vaultInfoPromise, timeoutPromise]) as any;
+                } catch (timeoutError) {
+                  console.warn('[App] Vault info check timed out for', iso2, '- assuming not registered');
+                  // On timeout, assume vault is not registered
+                  vaultInfo = null;
+                }
+                
+                if (!vaultInfo) {
+                  // Vault not registered
+                  console.log('[App] Vault not registered for', iso2);
+                  setHoveredVaultInfo({ registered: false, enabled: false });
+                  setVaultBalance(null);
+                  setIsLoadingVaultBalance(false);
+                  return;
+                }
+                
+                // Vault is registered
+                setHoveredVaultInfo({ registered: true, enabled: vaultInfo.enabled });
+                
+                if (!vaultInfo.enabled) {
+                  // Vault registered but disabled - don't fetch balance
+                  console.log('[App] Vault disabled for', iso2);
+                  setVaultBalance(null);
+                  setIsLoadingVaultBalance(false);
+                  return;
+                }
+                
+                // Vault is registered and enabled - fetch balance
+                // Use SAC (Stellar Asset Contract) for native XLM
+                // Testnet SAC: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+                const assetAddress = process.env.REACT_APP_NATIVE_XLM_SAC_ADDRESS || 
+                  'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+                const contractId = process.env.REACT_APP_CONTRACT_ID;
+                const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+                
+                if (!contractId) {
+                  console.warn('[App] Missing contract ID for vault balance');
+                  setIsLoadingVaultBalance(false);
+                  return;
+                }
+                
+                console.log('[App] Fetching vault balance for', iso2, {
+                  contractId: contractId.substring(0, 8) + '...',
+                  userAddress: walletAddress.substring(0, 8) + '...',
+                  countryCode: iso2,
+                  assetAddress: assetAddress.substring(0, 8) + '...'
+                });
+                
+                const response = await fetch(`${backendUrl}/api/smart-wallet/get-balance`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contractId: contractId,
+                    userAddress: walletAddress,
+                    countryCode: iso2,
+                    assetAddress: assetAddress,
+                    rpcUrl: process.env.REACT_APP_SOROBAN_RPC_URL
+                  })
+                });
+                
+                if (!response.ok) {
+                  console.error('[App] Vault balance API error:', response.status, response.statusText);
+                  setIsLoadingVaultBalance(false);
+                  return;
+                }
+                
+                const data = await response.json();
+                console.log('[App] Vault balance response:', data);
+                
+                if (data.success) {
+                  setVaultBalance(data.balance || 0);
+                } else {
+                  console.warn('[App] Vault balance fetch failed:', data.error);
+                  setVaultBalance(null);
+                }
+              } catch (error) {
+                console.error('[App] Failed to load vault info/balance:', error);
+                // On error, assume vault is not registered (most common case)
+                setHoveredVaultInfo({ registered: false, enabled: false });
+                setVaultBalance(null);
+              } finally {
+                setIsLoadingVaultBalance(false);
+              }
+            } else if (walletAddress && !iso2) {
+              // User is logged in but ISO2 not available
+              setHoveredVaultInfo(null);
+              setIsLoadingVaultBalance(false);
+            }
+          }
+        }
+      };
+      
+      const handleCountryMouseLeave = () => {
+        setHoveredCountry(null);
+        setVaultBalance(null);
+        setIsLoadingVaultBalance(false);
+        setHoveredVaultInfo(null);
+      };
+      
+      const handleCountryMouseMove = (e: mapboxgl.MapMouseEvent) => {
+        if (hoveredCountry) {
+          setHoveredCountry({
+            ...hoveredCountry,
+            position: { x: e.point.x, y: e.point.y }
+          });
+        }
+      };
+      
+      map.current.on('mouseenter', 'countries-fill', handleCountryMouseEnter);
+      map.current.on('mouseleave', 'countries-fill', handleCountryMouseLeave);
+      map.current.on('mousemove', 'countries-fill', handleCountryMouseMove);
+      
       return () => {
         map.current?.off('click', 'countries-fill', handleCountryClick);
+        map.current?.off('mouseenter', 'countries-fill', handleCountryMouseEnter);
+        map.current?.off('mouseleave', 'countries-fill', handleCountryMouseLeave);
+        map.current?.off('mousemove', 'countries-fill', handleCountryMouseMove);
         if (map.current) {
           map.current.getCanvas().style.cursor = '';
         }
@@ -2915,6 +3115,8 @@ const App: React.FC = () => {
   // Auto-checkin when wallet and contract client are ready
   // But only if user is not already in a session and there's no pending session join
   const hasCheckedIn = useRef(false);
+  // Track if we've already attempted to set verifier in this session
+  const hasSetVerifier = useRef(false);
   useEffect(() => {
     if (wallet && contractClient && !playerLocation && !isCheckingIn && !hasCheckedIn.current && 
         userCurrentSession === null && pendingSessionJoin === null) {
@@ -2997,6 +3199,8 @@ const App: React.FC = () => {
       setPlayerLocation(null);
       setSessionLink('');
       setWalletError(null);
+      // Reset verifier flag on disconnect so it can be set again on reconnect
+      hasSetVerifier.current = false;
       hasCheckedInRef.current = false;
       // Ensure overlay is expanded on mobile after disconnect
       const isMobile = window.innerWidth <= 768;
@@ -3362,10 +3566,12 @@ const App: React.FC = () => {
         console.log('[App] ✅ Admin status confirmed, setting up contracts...');
         
         // Automatically set verifier contract ID if available in env
+        // Only set once per session to avoid duplicate calls
         const verifierId = process.env.REACT_APP_VERIFIER_ID;
         console.log('[App] REACT_APP_VERIFIER_ID from env:', verifierId);
         let verifierRejected = false;
-        if (verifierId) {
+        if (verifierId && !hasSetVerifier.current) {
+          hasSetVerifier.current = true; // Mark as attempted
           try {
             console.log('[App] Setting verifier contract:', verifierId);
             await contractClient.setVerifier(verifierId);
@@ -3387,6 +3593,8 @@ const App: React.FC = () => {
               }
             }
           }
+        } else if (verifierId && hasSetVerifier.current) {
+          console.log('[App] Verifier already set in this session, skipping duplicate call');
         } else {
           console.warn('[App] REACT_APP_VERIFIER_ID not set in environment');
         }
@@ -4593,6 +4801,86 @@ const App: React.FC = () => {
         showTerrain={showTerrain}
         onShowTerrainChange={setShowTerrain}
       />
+      
+      {/* Country Vault Balance Tooltip */}
+      {hoveredCountry && (
+        <div
+          style={{
+            position: 'absolute',
+            left: `${hoveredCountry.position.x + 15}px`,
+            top: `${hoveredCountry.position.y - 10}px`,
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            color: '#fff',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            pointerEvents: 'none',
+            zIndex: 10000,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            maxWidth: '280px',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)'
+          }}
+        >
+          <div style={{ fontWeight: 'bold', marginBottom: '6px', fontSize: '16px' }}>
+            {hoveredCountry.countryName}
+          </div>
+          {hoveredCountry.iso2 && (
+            <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>
+              {hoveredCountry.iso2}
+            </div>
+          )}
+          {walletAddress && hoveredCountry.iso2 ? (
+            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.2)' }}>
+              {isLoadingVaultBalance ? (
+                <div style={{ fontSize: '12px', color: '#aaa', marginTop: '4px' }}>
+                  Checking vault status...
+                </div>
+              ) : hoveredVaultInfo ? (
+                hoveredVaultInfo.registered ? (
+                  hoveredVaultInfo.enabled ? (
+                    <>
+                      <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '4px' }}>
+                        Your Vault Balance:
+                      </div>
+                      {vaultBalance !== null && vaultBalance > 0 ? (
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#FFD700' }}>
+                          {(vaultBalance / 10000000).toFixed(4)} XLM
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '14px', color: '#888' }}>
+                          No balance
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ fontSize: '12px', color: '#ffa500', marginTop: '4px' }}>
+                      Vault disabled
+                    </div>
+                  )
+                ) : (
+                  <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                    Vault not registered
+                  </div>
+                )
+              ) : (
+                <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                  Vault not registered
+                </div>
+              )}
+            </div>
+          ) : walletAddress ? (
+            <div style={{ fontSize: '12px', color: '#888', marginTop: '8px', fontStyle: 'italic' }}>
+              {hoveredCountry.iso2 ? 'Loading...' : 'Country code not available'}
+            </div>
+          ) : (
+            <div style={{ fontSize: '12px', color: '#888', marginTop: '8px', fontStyle: 'italic' }}>
+              Connect wallet to see balance
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

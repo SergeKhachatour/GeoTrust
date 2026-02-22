@@ -505,16 +505,27 @@ if (-not [string]::IsNullOrEmpty($ZkVerifierContractId)) {
 
     # Step 5: Check if contract supports upgrade function
     Write-Info "Step 5: Checking if ZK Verifier contract supports upgrade..."
-    $helpOutput = soroban contract invoke --id $ZkVerifierContractId --source-account $SourceAccount --network $Network -- --help 2>&1
-    # Check for "upgrade" as a command in the Commands section (must be listed as a command, not just mentioned in text)
-    # Look for "upgrade" followed by whitespace (indicating it's a command name, not part of another word)
-    $hasUpgradeFunction = ($helpOutput -match "(?m)^\s+upgrade\s+") -or ($helpOutput -match "(?m)^\s+upgrade$")
+    # Try to invoke upgrade with a dummy hash to see if function exists
+    # This is more reliable than checking help output
+    $testHash = "0000000000000000000000000000000000000000000000000000000000000000"
+    $testOutput = soroban contract invoke `
+        --id $ZkVerifierContractId `
+        --source-account $SourceAccount `
+        --network $Network `
+        -- `
+        upgrade `
+        --new_wasm_hash "$testHash" `
+        2>&1
     
-    # Also check if it's in the Commands section specifically
-    if ($hasUpgradeFunction) {
-        $commandsSection = ($helpOutput | Select-String -Pattern "Commands:" -Context 0,20).Context.PostContext
-        $hasUpgradeFunction = $commandsSection -match "(?m)^\s+upgrade"
-    }
+    $testOutputString = ($testOutput | Out-String).ToLower()
+    $testExitCode = $LASTEXITCODE
+    
+    # Function exists if:
+    # 1. We get a parameter validation error (function exists but hash is invalid), OR
+    # 2. We get an authorization error (function exists but we're not admin), OR
+    # 3. We get any error that's NOT "unrecognized subcommand" or "unknown function"
+    $hasUpgradeFunction = ($testOutputString -match "hash|wasm|authorization|admin|invalid.*parameter|bad.*parameter") -and
+                         -not ($testOutputString -match "unrecognized.*subcommand|unknown.*subcommand|not.*found.*upgrade|no.*such.*function")
     
     if (-not $hasUpgradeFunction) {
         Write-Warning "ZK Verifier contract does not have an 'upgrade' function!"
@@ -564,10 +575,23 @@ if (-not [string]::IsNullOrEmpty($ZkVerifierContractId)) {
         if ($LASTEXITCODE -eq 0) {
             Write-Success "ZK Verifier contract upgraded successfully!"
         } else {
-            Write-Error "Contract upgrade failed!"
-            Write-Host "Error output:"
-            Write-Host $invokeOutput
-            exit 1
+            $invokeOutputString = ($invokeOutput | Out-String).ToLower()
+            # Check if the error is because the function doesn't exist
+            if ($invokeOutputString -match "unrecognized.*subcommand|unknown.*subcommand|not.*found.*upgrade") {
+                Write-Error "Contract upgrade failed - the deployed contract does not have an 'upgrade' function!"
+                Write-Warning "The local build has the upgrade function, but the deployed contract is an older version."
+                Write-Host ""
+                Write-Info "To fix this:"
+                Write-Host "  1. The deployed contract needs to be updated to a version that includes the upgrade function"
+                Write-Host "  2. You may need to deploy a new contract instance if the current one is too old"
+                Write-Host ""
+                Write-Info "Skipping ZK Verifier upgrade for now."
+            } else {
+                Write-Error "Contract upgrade failed!"
+                Write-Host "Error output:"
+                Write-Host $invokeOutput
+                exit 1
+            }
         }
     }
     Write-Host ""

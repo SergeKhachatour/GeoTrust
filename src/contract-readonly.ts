@@ -366,4 +366,14 @@ export class ReadOnlyContractClient {
       return null;
     }
   }
+
+  async getCountryInfo(countryCode: string): Promise<any> {
+    try {
+      const result = await this.call('get_country_info', countryCode);
+      return result;
+    } catch (error: any) {
+      console.error('[ReadOnlyContractClient] Failed to get country info:', error);
+      return null;
+    }
+  }
 }

@@ -292,6 +292,196 @@ export class ContractClient {
     await this.call('set_country_allowed', country, !denied);
   }
 
+  // ========== Country Vault Functions ==========
+
+  /**
+   * Register a country in the country vault system (admin-only)
+   */
+  async registerCountry(countryCode: string, countryName: string, adminAddress: string): Promise<boolean> {
+    console.log('[ContractClient] registerCountry:', countryCode, countryName);
+    return await this.call('register_country', countryCode, countryName, adminAddress) as boolean;
+  }
+
+  /**
+   * Enable or disable a country vault (admin-only)
+   */
+  async setCountryEnabled(countryCode: string, enabled: boolean, adminAddress: string): Promise<boolean> {
+    console.log('[ContractClient] setCountryEnabled:', countryCode, enabled);
+    return await this.call('set_country_enabled', countryCode, enabled, adminAddress) as boolean;
+  }
+
+  /**
+   * Get country information
+   */
+  async getCountryInfo(countryCode: string): Promise<any> {
+    try {
+      const result = await this.call('get_country_info', countryCode);
+      return result;
+    } catch (error) {
+      console.error('[ContractClient] Failed to get country info:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Deposit tokens to country-specific vault
+   * Note: This requires WebAuthn authentication - the actual implementation should be done via backend API
+   */
+  async deposit(
+    userAddress: string,
+    countryCode: string,
+    asset: string,
+    amount: number,
+    signaturePayload: string,
+    webauthnSignature: string,
+    webauthnAuthenticatorData: string,
+    webauthnClientData: string
+  ): Promise<boolean> {
+    console.log('[ContractClient] deposit:', countryCode, asset, amount);
+    // Convert signature payload and WebAuthn data to Bytes
+    const signaturePayloadBytes = Buffer.from(signaturePayload, 'utf8');
+    const webauthnSignatureBytes = Buffer.from(webauthnSignature, 'base64');
+    const webauthnAuthenticatorDataBytes = Buffer.from(webauthnAuthenticatorData, 'base64');
+    const webauthnClientDataBytes = Buffer.from(webauthnClientData, 'base64');
+    
+    return await this.call(
+      'deposit',
+      userAddress,
+      countryCode,
+      asset,
+      amount,
+      signaturePayloadBytes,
+      webauthnSignatureBytes,
+      webauthnAuthenticatorDataBytes,
+      webauthnClientDataBytes
+    ) as boolean;
+  }
+
+  /**
+   * Execute payment from country-specific vault
+   * Note: This requires WebAuthn authentication - the actual implementation should be done via backend API
+   */
+  async executePayment(
+    signerAddress: string,
+    countryCode: string,
+    destination: string,
+    amount: number,
+    asset: string,
+    signaturePayload: string,
+    webauthnSignature: string,
+    webauthnAuthenticatorData: string,
+    webauthnClientData: string
+  ): Promise<boolean> {
+    console.log('[ContractClient] executePayment:', countryCode, destination, amount);
+    // Convert signature payload and WebAuthn data to Bytes
+    const signaturePayloadBytes = Buffer.from(signaturePayload, 'utf8');
+    const webauthnSignatureBytes = Buffer.from(webauthnSignature, 'base64');
+    const webauthnAuthenticatorDataBytes = Buffer.from(webauthnAuthenticatorData, 'base64');
+    const webauthnClientDataBytes = Buffer.from(webauthnClientData, 'base64');
+    
+    return await this.call(
+      'execute_payment',
+      signerAddress,
+      countryCode,
+      destination,
+      amount,
+      asset,
+      signaturePayloadBytes,
+      webauthnSignatureBytes,
+      webauthnAuthenticatorDataBytes,
+      webauthnClientDataBytes
+    ) as boolean;
+  }
+
+  /**
+   * Get balance for a specific country and asset
+   */
+  async getBalance(userAddress: string, countryCode: string, asset: string): Promise<number> {
+    try {
+      const result = await this.call('get_balance', userAddress, countryCode, asset);
+      // Result is i128, convert to number
+      if (typeof result === 'number') {
+        return result;
+      }
+      if (typeof result === 'bigint') {
+        return Number(result);
+      }
+      if (result && typeof result === 'object' && 'lo' in result) {
+        // i128 is returned as { hi, lo }
+        return Number(result.lo || 0);
+      }
+      return 0;
+    } catch (error) {
+      console.error('[ContractClient] Failed to get balance:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get all asset balances for a user in a specific country
+   */
+  async getUserCountryBalances(userAddress: string, countryCode: string): Promise<Map<string, number>> {
+    try {
+      const result = await this.call('get_user_country_balances', userAddress, countryCode);
+      // Result is Map<Address, i128>
+      if (result && typeof result === 'object') {
+        const balances = new Map<string, number>();
+        if (result instanceof Map) {
+          result.forEach((value: any, key: any) => {
+            const assetAddress = typeof key === 'string' ? key : String(key);
+            const balance = typeof value === 'number' ? value : (value?.lo ? Number(value.lo) : 0);
+            balances.set(assetAddress, balance);
+          });
+        }
+        return balances;
+      }
+      return new Map();
+    } catch (error) {
+      console.error('[ContractClient] Failed to get user country balances:', error);
+      return new Map();
+    }
+  }
+
+  /**
+   * Get all countries where user has balances
+   */
+  async getUserCountries(userAddress: string): Promise<string[]> {
+    try {
+      const result = await this.call('get_user_countries', userAddress);
+      // Result is Vec<String>
+      if (Array.isArray(result)) {
+        return result.map((code: any) => String(code));
+      }
+      return [];
+    } catch (error) {
+      console.error('[ContractClient] Failed to get user countries:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get total balance across all countries for a specific asset
+   */
+  async getTotalBalance(userAddress: string, asset: string): Promise<number> {
+    try {
+      const result = await this.call('get_total_balance', userAddress, asset);
+      // Result is i128
+      if (typeof result === 'number') {
+        return result;
+      }
+      if (typeof result === 'bigint') {
+        return Number(result);
+      }
+      if (result && typeof result === 'object' && 'lo' in result) {
+        return Number(result.lo || 0);
+      }
+      return 0;
+    } catch (error) {
+      console.error('[ContractClient] Failed to get total balance:', error);
+      return 0;
+    }
+  }
+
   async setVerifier(verifierId: string): Promise<void> {
     console.log('[ContractClient] setVerifier called with:', verifierId);
     // Convert string to Address - Contract.call() will handle the conversion

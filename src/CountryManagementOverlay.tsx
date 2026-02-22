@@ -5,6 +5,7 @@ import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import { ContractClient } from './contract';
 import { ReadOnlyContractClient } from './contract-readonly';
 import { iso2ToNumeric, iso3ToIso2 } from './countryCodes';
+import { extractCountryInfo, validateCountryCode } from './utils/countryVaultUtils';
 
 interface CountryManagementOverlayProps {
   isOpen: boolean;
@@ -44,6 +45,13 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
   const drawRef = useRef<MapboxDraw | null>(null);
   const countryFeatureRef = useRef<any>(null);
   const mapRemovedRef = useRef<boolean>(false);
+  
+  // Country Vault state
+  const [vaultInfo, setVaultInfo] = useState<any>(null);
+  const [isLoadingVault, setIsLoadingVault] = useState(false);
+  const [isRegisteringVault, setIsRegisteringVault] = useState(false);
+  const [isTogglingVault, setIsTogglingVault] = useState(false);
+  const [countryIso2, setCountryIso2] = useState<string | null>(null);
 
   // Check if current user is country admin
   useEffect(() => {
@@ -95,7 +103,7 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
     }
   }, [isOpen, countryCode, contractClient]);
 
-  // Load country GeoJSON
+  // Load country GeoJSON and extract ISO2 code
   useEffect(() => {
     const loadCountryGeoJson = async () => {
       console.log('[CountryManagement] Loading GeoJSON for country:', countryCode);
@@ -139,6 +147,26 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
           setOriginalGeoJson(featureCopy);
           setCurrentGeoJson(featureCopy);
           countryFeatureRef.current = featureCopy;
+          
+          // Extract ISO2 code for vault operations
+          const countryInfo = extractCountryInfo(countryFeature);
+          if (countryInfo && countryInfo.iso2) {
+            setCountryIso2(countryInfo.iso2);
+          } else {
+            // Fallback: try to get from properties
+            const iso2 = countryFeature.properties?.ISO2 || countryFeature.properties?.iso_a2;
+            if (iso2 && validateCountryCode(iso2)) {
+              setCountryIso2(iso2.toUpperCase());
+            } else {
+              const iso3 = countryFeature.id || countryFeature.properties?.id;
+              if (iso3) {
+                const iso2FromIso3 = iso3ToIso2(String(iso3));
+                if (iso2FromIso3 && validateCountryCode(iso2FromIso3)) {
+                  setCountryIso2(iso2FromIso3.toUpperCase());
+                }
+              }
+            }
+          }
         } else {
           console.warn(`[CountryManagement] Country ${countryCode} not found in GeoJSON. Available codes:`, 
             geojson.features.slice(0, 5).map((f: any) => ({ 
@@ -151,9 +179,11 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
           setOriginalGeoJson(null);
           setCurrentGeoJson(null);
           countryFeatureRef.current = null;
+          setCountryIso2(null);
         }
       } catch (error) {
         console.error('[CountryManagement] Failed to load GeoJSON:', error);
+        setCountryIso2(null);
       }
     };
 
@@ -164,6 +194,8 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
       countryFeatureRef.current = null;
       setOriginalGeoJson(undefined); // Reset to undefined to indicate not loaded
       setCurrentGeoJson(null);
+      setCountryIso2(null);
+      setVaultInfo(null);
       // Clean up map when overlay closes
       if (countryMap && !mapRemovedRef.current) {
         try {
@@ -180,6 +212,79 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, countryCode]);
+  
+  // Load vault info when ISO2 code is available
+  useEffect(() => {
+    const loadVaultInfo = async () => {
+      if (!countryIso2 || !contractClient || !isOpen) {
+        setVaultInfo(null);
+        return;
+      }
+      
+      setIsLoadingVault(true);
+      try {
+        const info = await contractClient.getCountryInfo(countryIso2);
+        setVaultInfo(info);
+      } catch (error) {
+        console.error('[CountryManagement] Failed to load vault info:', error);
+        setVaultInfo(null);
+      } finally {
+        setIsLoadingVault(false);
+      }
+    };
+    
+    loadVaultInfo();
+  }, [countryIso2, contractClient, isOpen]);
+  
+  // Handle vault registration
+  const handleRegisterVault = async () => {
+    if (!countryIso2 || !walletAddress || !validateCountryCode(countryIso2)) {
+      alert('Invalid country code or wallet address');
+      return;
+    }
+    
+    try {
+      setIsRegisteringVault(true);
+      await contractClient.registerCountry(countryIso2, countryName, walletAddress);
+      alert(`Successfully registered ${countryIso2} (${countryName}) for country vault`);
+      // Reload vault info
+      const info = await contractClient.getCountryInfo(countryIso2);
+      setVaultInfo(info);
+    } catch (error: any) {
+      console.error('[CountryManagement] Error registering vault:', error);
+      if (error.message?.includes('already registered')) {
+        alert(`Country ${countryIso2} is already registered`);
+        // Reload to get current info
+        const info = await contractClient.getCountryInfo(countryIso2);
+        setVaultInfo(info);
+      } else {
+        alert(`Failed to register country vault: ${error.message || 'Unknown error'}`);
+      }
+    } finally {
+      setIsRegisteringVault(false);
+    }
+  };
+  
+  // Handle vault enable/disable
+  const handleToggleVault = async () => {
+    if (!countryIso2 || !walletAddress || !vaultInfo) {
+      return;
+    }
+    
+    try {
+      setIsTogglingVault(true);
+      await contractClient.setCountryEnabled(countryIso2, !vaultInfo.enabled, walletAddress);
+      alert(`Successfully ${!vaultInfo.enabled ? 'enabled' : 'disabled'} country vault for ${countryIso2}`);
+      // Reload vault info
+      const info = await contractClient.getCountryInfo(countryIso2);
+      setVaultInfo(info);
+    } catch (error: any) {
+      console.error('[CountryManagement] Error toggling vault:', error);
+      alert(`Failed to toggle country vault: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsTogglingVault(false);
+    }
+  };
 
   // Initialize map for country editing
   useEffect(() => {
@@ -591,7 +696,7 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
         </div>
 
         {/* Policy Settings */}
-        <div style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
+        <div style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '12px' }}>
           <h3 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>Policy Settings</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span>Country Status:</span>
@@ -609,6 +714,80 @@ export const CountryManagementOverlay: React.FC<CountryManagementOverlayProps> =
             )}
           </div>
         </div>
+
+        {/* Country Vault Settings */}
+        {(isMainAdmin || isCountryAdmin) && (
+          <div style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '12px', backgroundColor: '#f9f9f9' }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>Country Vault</h3>
+            {!countryIso2 ? (
+              <div style={{ fontSize: '12px', color: '#666' }}>
+                ISO2 code not available for this country
+              </div>
+            ) : (
+              <>
+                {isLoadingVault ? (
+                  <div style={{ fontSize: '12px', color: '#666' }}>Loading vault status...</div>
+                ) : vaultInfo ? (
+                  <div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Vault Status:</strong>{' '}
+                      <span style={{
+                        color: vaultInfo.enabled ? '#28a745' : '#dc3545',
+                        fontWeight: 'bold'
+                      }}>
+                        {vaultInfo.enabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                      <div>ISO Code: <strong>{vaultInfo.code}</strong></div>
+                      <div>Registered: {new Date(vaultInfo.created_at * 1000).toLocaleString()}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className="primary-button"
+                        onClick={handleToggleVault}
+                        disabled={isTogglingVault}
+                        style={{
+                          fontSize: '12px',
+                          padding: '6px 12px',
+                          backgroundColor: vaultInfo.enabled ? '#dc3545' : '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {isTogglingVault ? 'Processing...' : (vaultInfo.enabled ? 'Disable Vault' : 'Enable Vault')}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                      Country vault not registered for <strong>{countryIso2}</strong>
+                    </div>
+                    <button
+                      className="primary-button"
+                      onClick={handleRegisterVault}
+                      disabled={isRegisteringVault}
+                      style={{
+                        fontSize: '12px',
+                        padding: '6px 12px',
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRegisteringVault ? 'Registering...' : 'Register Country Vault'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Map Editor */}
         {canEditBorders && (
