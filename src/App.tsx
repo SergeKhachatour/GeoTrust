@@ -19,6 +19,7 @@ import { geolinkApi, NearbyNFT, NearbyContract, PendingDepositAction } from './s
 import { PendingDepositActions } from './components/PendingDepositActions';
 import { PasskeySetupModal } from './components/PasskeySetupModal';
 import { CombinedSessionsPanel } from './components/CombinedSessionsPanel';
+import { ContractExplorer } from './components/ContractExplorer';
 
 // Helper function to construct NFT image URL (matching xyz-wallet exactly)
 function cleanServerUrl(serverUrl: string | null | undefined): string | null {
@@ -273,6 +274,7 @@ const App: React.FC = () => {
   const [adminPanelMinimized, setAdminPanelMinimized] = useState(false);
   const [nftPanelMinimized, setNftPanelMinimized] = useState(false);
   const [contractPanelMinimized, setContractPanelMinimized] = useState(false);
+  const [contractExplorerMinimized, setContractExplorerMinimized] = useState(false);
   
   // Confirmation and notification overlay states
   const [confirmationState, setConfirmationState] = useState<{
@@ -4518,6 +4520,17 @@ const App: React.FC = () => {
                   contractClient={contractClient}
                   gameHubId={process.env.REACT_APP_GAME_HUB_ID || null}
                 />
+
+                {/* Contract Explorer Panel - Always visible for contract exploration */}
+                <CollapsiblePanel
+                  title="Contract Explorer"
+                  minimized={contractExplorerMinimized}
+                  onToggleMinimize={() => setContractExplorerMinimized(!contractExplorerMinimized)}
+                  className="contract-explorer-panel"
+                  style={{ marginTop: '8px' }}
+                >
+                  <ContractExplorer />
+                </CollapsiblePanel>
 
                 {/* Legacy Your Session Panel - REMOVED, now in CombinedSessionsPanel */}
                 {false && userCurrentSession !== null && (
